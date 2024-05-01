@@ -1,0 +1,541 @@
+---
+title: "CD45+Thy1+ cell type identification"
+output:
+   html_document: 
+     theme: united
+     df_print: kable
+     toc: yes
+date: 'Compiled: `r format(Sys.Date(), "%B %d, %Y")`'
+---
+
+```{r setup, include = FALSE}
+all_times <- list()  # store the time for each chunk
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- difftime(Sys.time(), now, units = "secs")
+      all_times[[options$label]] <<- res
+    }
+  }
+}))
+knitr::opts_chunk$set(
+  tidy = TRUE,
+  tidy.opts = list(width.cutoff = 95),
+  message = FALSE,
+  warning = FALSE,
+  time_it = TRUE
+)
+```
+
+
+# Universal packages
+
+```{r Load packages}
+library(Seurat)
+library(tidyverse)
+library(patchwork)
+library(cowplot)
+```
+
+
+# Data input
+
+```{r Load SCT processed data}
+# Load Sen_2 data
+Sen_2  <- readRDS("../Sensitivity_2_SCT_log_final.rds")
+
+head(x = Sen_2[[]])
+
+# Load Sen2 CD45+Thy1+ subsetted data
+Thy1 <- readRDS("../Sensitivity_2_SCT_Thy1_pos_HR_Sub_log_final.rds")
+
+head(x = Thy1[[]])
+```
+
+
+# CD45+Thy1+ clusters
+
+```{r Thy1 culsters, fig.width = 5, fig.height = 4}
+# Show the numbers for the primary clusters
+table(Sen_2@meta.data$seurat_clusters, split.by = Sen_2@meta.data$treatment)
+
+# Plot the primary clusters
+primary_cluster <- DimPlot(Sen_2, label = T, repel = T, group.by = "seurat_clusters") +
+  labs(title = "Primary clusters") +
+  guides(color = guide_legend(override.aes = list(size = 4), ncol=2) )
+
+primary_cluster
+
+# Show the numbers for the new clusters
+table(Thy1@meta.data$seurat_clusters, split.by = Thy1@meta.data$treatment)
+
+# Plot the CD45+ Thy1+ clusters
+DimPlot(Thy1, label = T, repel = T, group.by = "seurat_clusters") +
+  labs(title = "CD45+Thy1+")
+```
+
+```{r CD45 and Thy1 expression, fig.width = 8, fig.height = 5}
+# Set RNA assay as default
+DefaultAssay(Sen_2) <- "RNA"
+
+# Expression of CD45 and Thy1 in primary clusters
+plot_grid(ncol = 2,
+          FeaturePlot(Sen_2, features = c("Ptprc"), slot = "scale.data") + NoAxes() + NoLegend(),
+          VlnPlot(Sen_2, features = c("Ptprc"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 8, angle = 0, hjust = 0.5)),
+          FeaturePlot(Sen_2, features = c("Thy1"), slot = "scale.data") + NoAxes() + NoLegend(),
+          VlnPlot(Sen_2, features = c("Thy1"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 8, angle = 0, hjust = 0.5))
+)
+
+# Set RNA assay as default
+DefaultAssay(Thy1) <- "RNA"
+
+# Expression of CD45 and Thy1 in CD45+Thy1+ clusters
+plot_grid(ncol = 2,
+          FeaturePlot(Thy1, features = c("Ptprc"), slot = "scale.data") + NoAxes() + NoLegend(),
+          VlnPlot(Thy1, features = c("Ptprc"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+          FeaturePlot(Thy1, features = c("Thy1"), slot = "scale.data") + NoAxes() + NoLegend(),
+          VlnPlot(Thy1, features = c("Thy1"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+)
+```
+
+```{r CD45 Thy1 expression for paper}
+# Expression of CD45 and Thy1 in primary clusters
+primary_ptprc_thy1 <- plot_grid(ncol = 2,
+          FeaturePlot(Sen_2, features = c("Ptprc"), slot = "scale.data", cols = c("gray", "red")) + NoAxes() + NoLegend(),
+          VlnPlot(Sen_2, features = c("Ptprc"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 8, angle = 0, hjust = 0.5)),
+          FeaturePlot(Sen_2, features = c("Thy1"), slot = "scale.data", cols = c("gray", "red")) + NoAxes() + NoLegend(),
+          VlnPlot(Sen_2, features = c("Thy1"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 8, angle = 0, hjust = 0.5))
+)
+
+# Expression of CD45 and Thy1 in CD45+Thy1+ clusters
+Thy1_ptprc_thy1 <- plot_grid(ncol = 2,
+          FeaturePlot(Thy1, features = c("Ptprc"), slot = "scale.data", cols = c("gray", "red")) + NoAxes() + NoLegend(),
+          VlnPlot(Thy1, features = c("Ptprc"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+          FeaturePlot(Thy1, features = c("Thy1"), slot = "scale.data", cols = c("gray", "red")) + NoAxes() + NoLegend(),
+          VlnPlot(Thy1, features = c("Thy1"), assay ="RNA", pt.size = 0) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+)
+```
+
+
+# HSC and T cell removal
+
+```{r HSC markers, fig.width = 7, fig.height = 2}
+# HSC markers
+HSC_marker <- VlnPlot(Thy1, features = c("Cd34", "Cd38", "Esam"), group.by = "seurat_clusters", assay ="RNA", pt.size = 0) & NoLegend() & theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 9, angle = 0, hjust = 0.5))
+
+HSC_marker
+```
+
+```{r T cell markers, fig.width = 10, fig.height = 2}
+# T cell markers
+VlnPlot(Thy1, features = c("Cd3e", "Trac", "Trgc1"), assay ="RNA", pt.size = 0) & NoLegend() & theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+```
+
+```{r T cell differential markers, fig.width = 7, fig.height = 2}
+# T cell markers
+T_marker <- VlnPlot(Thy1, features = c("Cd3e", "Trac", "Trgc1"), group.by = "seurat_clusters", assay ="RNA", pt.size = 0) & NoLegend() & theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 9, angle = 0, hjust = 0.5))
+
+T_marker
+```
+
+
+# ILC subsetting
+
+```{r ILC subsetting}
+# Since the cluster numbers start at 0 instead of 1, have to shift indicies by 1 in order to
+# subtract the clusters from vector
+
+# ILCs (cluster 0-5, 7, 8, 11; Cluster 6, 9, 12: T cells; Cluster 10: HSC)
+ILC <- subset(Thy1, idents = c(0:12)[-c(7, 10, 11, 13)])
+
+table(ILC@active.ident, split.by = ILC@meta.data$treatment)
+
+# Plot the ILC clusters
+DimPlot(ILC, label = T, repel = T, group.by = "seurat_clusters") + labs(title = "ILC")
+```
+
+
+# ILC gene expression
+
+```{r ILC gene markers, fig.width = 7, fig.height = 2}
+# ILC markers
+VlnPlot(ILC, features = c("Id2", "Il7r", "Il2ra"), assay ="RNA", pt.size = 0, group.by = "seurat_clusters") & NoLegend() & theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)) 
+```
+
+```{r ILC differential gene expression, fig.width = 6, fig.height = 3}
+ILC.subs <- c("Ltb", "Lta", "Tnf", "Il22", "Il17a", "Rorc", "Il13", "Il10", "Il5", "Arg1", "Klrg1", "Il1rl1", "Gata3", "Rora", "Itga1", "Itga2", "Gzma", "Prf1", "Ifng", "Ncr1", "Klrc2", "Eomes", "Tbx21")
+
+DotPlot(ILC, features = rev(ILC.subs), group.by = "seurat_clusters", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+
+ATF <- c("Atf4", "Ets1", "Fos", "Fosb", "Fosl1", "Fosl2", "Id2", "Jun", "Junb", "Jund", "Nfatc1", "Nfatc2", "Nfatc3", "Nfatc4", "Nfkb1", "Nfkb2", "Nr4a1", "Nr4a2", "Nr4a3")
+
+DotPlot(ILC, features = rev(ATF), group.by = "seurat_clusters", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+
+# Cell type annotation
+
+```{r Add cell type annotation}
+# Effector T cell (Teff): Il7r- CD25+ (cluster 9)
+# Effector memory T cell (Tem): Il7r+ CD25- (cluster 12)
+# Central memory T cell (Tcm): Il7r+ Cd25+ (cluster 6)
+# https://www.mdpi.com/2072-6694/8/3/36
+
+# Conventional ST2+ IL-18R- ILC2 (nILC2): Gata3hi Rora+
+# Areg ILC2 (cluster 0)
+# IL-13 ILC2 (cluster 1)
+# IL-10 ILC2 (cluster 2)
+# Quiescent ILC2 (cluster 3), all activation genes are low
+# KLRG1 ILC2 (cluster 4)
+# LTB ILC2 (cluster 5)
+
+# ILC1: Tbx21+ Ncr1+ Ifng+ Prf1- (cluster 8)
+
+# NK: Eomes+ Tbx21+ Klrb1c+ Ncr1+ Prf1+ (cluster 7) 
+# ST2 NK: Eomes+ Tbx21+ Klrb1c+ Ncr1+ Prf1+ Gata3+ Il1rl1+ (cluster 11)
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4458425/
+
+# Hematopoietic stem cell (HSC): Cd34+ Pecam1+ (cluster 10)
+
+
+# Label the primary cell type annotation with cluster numbers to all the clusters
+new.thy1.primary.ids <- c("0_ILC", "1_ILC", "2_ILC", "3_ILC", "4_ILC", "5_ILC", "6_T", "7_ILC", "8_ILC", "9_T", "10_HSC", "11_ILC", "12_T")
+names(new.thy1.primary.ids) <- levels(Thy1)
+Thy1 <- RenameIdents(Thy1, new.thy1.primary.ids)
+Thy1 <- AddMetaData(Thy1, metadata = Thy1@active.ident, col.name = 'seurat_cluster_primary_cell_type')
+
+DimPlot(Thy1, group.by = "seurat_cluster_primary_cell_type", label = T, repel = T) +
+  labs(title = "CD45+Thy1+") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16))
+
+DimPlot(Thy1, split.by = "treatment", label = F) +
+  labs(title = "CD45+Thy1+", subtitle = "Split by treatments") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16), axis.title = element_text(size = 12)) +
+  ggtitle(NULL)
+
+# Show the numbers for the Thy1 cell with cluster numbers across the conditions
+table(Thy1@active.ident, split.by = Thy1@meta.data$treatment)
+
+
+# Label the cell type annotation with cluster numbers to all the clusters
+new.thy1.numbered.ids <- c("0_Areg ILC2", "1_IL-13 ILC2", "2_IL-10 ILC2", "3_Quiescent ILC2", "4_KLRG1 ILC2", "5_LTB ILC2", "6_T", "7_NK", "8_ILC1", "9_T", "10_HSC", "11_ST2 NK", "12_T")
+names(new.thy1.numbered.ids) <- levels(Thy1)
+Thy1 <- RenameIdents(Thy1, new.thy1.numbered.ids)
+Thy1 <- AddMetaData(Thy1, metadata = Thy1@active.ident, col.name = 'seurat_cluster_cell_type')
+
+DimPlot(Thy1, group.by = "seurat_cluster_cell_type", label = T, repel = T) +
+  labs(title = "CD45+Thy1+") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16))
+
+DimPlot(Thy1, split.by = "treatment", label = F) +
+  labs(title = "CD45+Thy1+", subtitle = "Split by treatments") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16), axis.title = element_text(size = 12)) +
+  ggtitle(NULL)
+
+# Show the numbers for the Thy1 cell with cluster numbers across the conditions
+table(Thy1@active.ident, split.by = Thy1@meta.data$treatment)
+
+
+# Label the cell type annotation to all the clusters
+new.thy1.ids <- c("Areg ILC2", "IL-13 ILC2", "IL-10 ILC2", "Quiescent ILC2", "KLRG1 ILC2", "LTB ILC2", "Tcm", "NK", "ILC1", "Teff", "HSC", "ST2 NK", "Tem")
+names(new.thy1.ids) <- levels(Thy1)
+Thy1 <- RenameIdents(Thy1, new.thy1.ids)
+Thy1 <- AddMetaData(Thy1, metadata = Thy1@active.ident, col.name = 'cell_type')
+
+DimPlot(Thy1, group.by = "cell_type", label = T, repel = T) +
+  labs(title = "CD45+Thy1+") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16))
+
+DimPlot(Thy1, split.by = "treatment", label = F) +
+  labs(title = "TCD45+Thy1+", subtitle = "Split by treatments") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16), axis.title = element_text(size = 12)) +
+  ggtitle(NULL)
+
+# Show the numbers for the Thy1 cell across the conditions
+table(Thy1@active.ident, split.by = Thy1@meta.data$treatment)
+```
+
+```{r Primary labeled clusters for paper}
+# Thy1 clusters
+Thy1_cluster <- DimPlot(Thy1, group.by = "seurat_cluster_primary_cell_type", label = T, repel = T) +
+  labs(title = "CD45+Thy1+") +
+  theme(plot.title = element_text(hjust = 0))
+
+Thy1_cluster
+```
+
+
+# ILC subsets
+
+```{r ILC subsets}
+# Select out the cell subset based on cell_type
+Thy1 <- SetIdent(Thy1, value = "cell_type")
+
+# ILC
+ILC <- Thy1 %>%
+  subset(idents = c("Tcm", "Teff", "HSC", "Tem"), invert = TRUE)
+
+table(ILC@meta.data$cell_type, split.by = ILC@meta.data$treatment)
+```
+
+```{r ILC slusters for paper}
+# ILC clusters
+ILC_cluster <- DimPlot(ILC, group.by = "seurat_cluster_cell_type", split.by = "treatment", label = F) +
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16), axis.title = element_text(size = 12)) +
+  ggtitle(NULL)
+```
+
+
+# Cell distribution among the conditions
+
+```{r Cell type distribution}
+# Set the themes
+xtheme <- theme_bw() +
+  theme(plot.title = element_text(face = "bold",hjust = 0.5, size= 10),
+        axis.text.y = element_text(face = "bold",angle = 0, size = 10, hjust=1),
+        axis.title.y = element_text(face = "bold", size = rel(1.2)),
+        axis.text.x = element_text(face = "bold",angle = 0, size = 10),
+        axis.title.x = element_text(face = "bold", size = rel(1.4)),
+        axis.ticks.x = element_blank(), strip.text = element_text(size=10))
+
+# Reveal the distributional change in ILC cells among the conditions with numbered clusters
+ILC.numbered.distribution <- data.frame(ILC@active.ident, ILC@meta.data$treatment) 
+colnames(ILC.numbered.distribution) <- c("seurat_cluster_Cell_Type", "Treatment")
+ILC.numbered.distribution <- ILC.numbered.distribution %>% group_by(seurat_cluster_Cell_Type, Treatment) %>% 
+  summarise(Nb = n()) %>%
+  mutate(C = sum(Nb)) %>%
+  mutate(Percent = Nb/C*100) 
+
+ggplot(ILC.numbered.distribution, aes(fill = Treatment, y = Percent, x = seurat_cluster_Cell_Type)) + 
+  geom_bar(position="fill", stat="identity") + xlab("") + ylab("Proportion") + xtheme + 
+  theme(legend.position='right', axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  theme(legend.title = element_text(size = 14, face = "bold"), legend.text = element_text(size = 14)) +
+  ggtitle("ILC distribution across the treatments") +
+  theme(plot.title = element_text(size = 16))
+
+# Reveal the distributional change in ILCs among the conditions
+ILC.distribution <- data.frame(ILC@active.ident, ILC@meta.data$treatment) 
+colnames(ILC.distribution) <- c("Cell_Type", "Treatment")
+ILC.distribution <- ILC.distribution %>% group_by(Cell_Type, Treatment) %>% 
+  summarise(Nb = n()) %>%
+  mutate(C = sum(Nb)) %>%
+  mutate(Percent = Nb/C*100) 
+
+ggplot(ILC.distribution, aes(fill = Treatment, y = Percent, x = Cell_Type)) + 
+  geom_bar(position="fill", stat="identity") + xlab("") + ylab("Proportion") + xtheme + 
+  theme(legend.position='right', axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  theme(legend.title = element_text(size = 14, face = "bold"), legend.text = element_text(size = 14)) +
+  ggtitle("ILC distribution across the treatments") +
+  theme(plot.title = element_text(size = 16))
+```
+
+```{r ILC cell distribution for paper}
+ILC_distribution <- ggplot(ILC.distribution, aes(fill = Treatment, y = Percent, x = Cell_Type)) + 
+  geom_bar(position="fill", stat="identity") + xlab("") + ylab("Proportion") + xtheme + 
+  theme(legend.position='right', axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  theme(legend.title = element_text(size = 14, face = "bold"), legend.text = element_text(size = 14)) +
+  ggtitle("ILC distribution across the treatments") +
+  theme(plot.title = element_text(size = 16))
+```
+
+
+# ILC differential gene expression with annotation
+
+```{r Labeled ILC differential gene expression, fig.width = 7, fig.height = 3}
+ILC.subs <- c("Ltb", "Lta", "Tnf", "Il22", "Il17a", "Rorc", "Il13", "Il10", "Il5", "Arg1", "Klrg1", "Il1rl1", "Gata3", "Rora", "Itga1", "Itga2", "Gzma", "Prf1", "Ifng", "Ncr1", "Klrc2", "Eomes", "Tbx21")
+
+DotPlot(ILC, features = rev(ILC.subs), group.by = "cell_type", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+DotPlot(ILC, features = rev(ILC.subs), group.by = "seurat_cluster_cell_type", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+
+DotPlot(ILC, features = rev(ATF), group.by = "cell_type", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+DotPlot(ILC, features = rev(ATF), group.by = "seurat_cluster_cell_type", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r ILC differential genes for paper, fig.width = 14, fig.height = 4}
+# Differential gene sets
+T1 <- c("Tbx21", "Eomes","Klrc2","Ncr1", "Ifng", "Prf1", "Gzma", "Gzmb", "Itga1", "Itga2")
+T2 <- c("Rora", "Gata3", "Il1rl1", "Klrg1", "Arg1", "Areg", "Il5", "Il10", "Il13")
+T3 <- c("Rorc", "Il17rb", "Il17a", "Il22")
+Inflamm <- c("Il6", "Tnf", "Lta", "Ltb")
+
+functional_gene <- list("Type 1" = T1, "Type 2" = T2, "Type 3" = T3, "Inflamm" = Inflamm, "Activation transcription factor" = ATF)
+
+ILC_differential <- DotPlot(ILC, features = functional_gene, group.by = "seurat_cluster_cell_type", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  ggtitle("Differential markers for ILC subsets")
+
+ILC_differential
+```
+
+```{r Marker genes for the clusters, fig.width = 12, fig.height = 12}
+# Compute differential expression
+marker_genes <- FindAllMarkers(Thy1, log2FC.threshold = 0.2, test.use = "wilcox", min.pct = 0.1, min.diff.pct = 0.2, only.pos = TRUE, max.cells.per.ident = 50, assay = "RNA")
+
+# Get genes that are positivelly expressed in a cell type and possibly not expressed in the others
+# Select the top 5 to visualize as plots
+marker_genes %>%
+    group_by(cluster) %>%
+    top_n(-5, p_val_adj) -> top5
+
+# Plot Heatmap
+markers_heatmap <- DoHeatmap(Thy1, features = as.character(unique(top5$gene)), group.by = "seurat_cluster_primary_cell_type", assay = "RNA", slot = 'scale.data', group.bar.height = 0.01, label = F)
+
+markers_heatmap
+```
+
+# ILC effector genes
+
+```{r ILC cytokine genes, fig.width = 8, fig.height = 5}
+# Cytokines
+cytokines <- c("Prf1", "Gzma", "Gzmb", "Ifng", "Areg", "Il2", "Il4", "Il5", "Il6", "Il10", "Il13", "Il17a", "Il22", "Csf2", "Tnf", "Lta", "Ltb", "Tnfsf10", "Tnfsf11", "Tnfsf14", "Tgfb1")
+
+DotPlot(ILC, features = rev(cytokines), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+DotPlot(ILC, features = rev(cytokines), group.by = "seurat_cluster_cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r ILC chemokine genes, fig.width = 5, fig.height = 5}
+# Chemokines
+chemokines <- c("Ccl1", "Ccl2", "Ccl3", "Ccl3l1", "Ccl4", "Ccl4l1", "Ccl4l2", "Ccl5", "Cxcl2", "Cxcl4", "Cxcl4l1", "Cxcl9", "Cxcl10", "Cxcl11", "Cxcl12")
+
+DotPlot(ILC, features = rev(chemokines), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+DotPlot(ILC, features = rev(chemokines), group.by = "seurat_cluster_cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r ILC activation transcription factor genes, fig.width = 8, fig.height = 5}
+# Activation transcription factors
+DotPlot(ILC, features = rev(ATF), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+DotPlot(ILC, features = rev(ATF), group.by = "seurat_cluster_cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r ILC effector genes for paper, fig.width = 12, fig.height = 6}
+# ILC cytokine and chemokine
+Proinflamm <- c("Il2", "Il6", "Csf1", "Csf2")
+T1_eff <- c("Prf1", "Gzma", "Gzmb", "Ifng")
+T2_eff <- c("Areg", "Il4", "Il5", "Il10", "Il13")
+T3_eff <- c("Il17a", "Il22")
+TNF_family <- c("Tnf", "Lta", "Ltb", "Tnfsf10", "Tnfsf11", "Tnfsf14")
+TGF_family <- c("Tgfb1", "Tgfb2")
+
+Cyto_Chemo <- list("Type 1" = T1_eff, "Type 2" = T2_eff, "Type 3" = T3_eff, "Inflamm" = Proinflamm, "TNF" = TNF_family, "TGF" = TGF_family, "Chemokine" = chemokines)
+
+ILC_Cyto_Chemo <- DotPlot(ILC, features = Cyto_Chemo, group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) +
+  ggtitle("Cytokine and chemokine expression")
+
+ILC_Cyto_Chemo
+
+# ILC activation transcription factor
+LATF <- list(" "= ATF)
+
+ILC_ATF <- DotPlot(ILC, features = rev(LATF), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) +
+  ggtitle("Activation transcription factor expression")
+
+ILC_ATF
+```
+
+```{r Effector function, fig.width = 5, fig.height = 4}
+# Compare the effector function between Alt and Alt.BPC
+Neutrophilia <- rev(c("Tnf", "Csf2", "Cxcl2", "Cxcl15"))
+Remodeling <- rev(c("Areg", "Tgfb1", "Tnfsf14"))
+
+Effector_markers <- list("Neutrophilia" = Neutrophilia, "Remodeling" = Remodeling)
+
+Effector_function <- DotPlot(ILC, features = Effector_markers, group.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  coord_flip() +
+  ggtitle("Ovarall effector function genes")
+
+Effector_function
+```
+
+
+# Packages for external picture input
+
+```{r Load Image-Processing package}
+# Load Image-Processing package (magick)
+library(magick)
+```
+
+
+# Paper figure layout
+
+```{r Paper figure 2 layout, fig.width = 16, fig.height = 20}
+# Input the flowchart
+flowchart <- image_read("./scRNAseq_flow_chart.png")
+
+# Generate the plot in paper figure form
+figure2_1 <- ggdraw() +
+  draw_image(flowchart, scale = 1)
+
+figure2_2 <- plot_grid(primary_cluster, primary_ptprc_thy1, labels = c('(B)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1, 1.5))
+figure2_3 <- plot_grid(Thy1_cluster, Thy1_ptprc_thy1, labels = c('(D)', '(E)'), label_size = 18, nrow = 1, rel_widths = c(1, 1.5))
+figure2_4 <- plot_grid(HSC_marker, T_marker, labels = c('(F)', '(G)'), label_size = 18, nrow = 1, rel_widths = c(1, 1))
+
+figure2 <- plot_grid(NULL, figure2_1, figure2_2, figure2_3, figure2_4,
+  labels = c('(A)'), label_size = 18,
+  nrow = 5,
+  ncol = 1,
+  rel_heights = c(0.2, 4, 2, 2, 1)
+)
+
+figure2
+```
+
+```{r Paper figure 3 layout, fig.width = 14, fig.height = 18}
+# Generate the plot in paper figure form
+figure3_1 <- plot_grid(ILC_differential, labels = c('(A)'), label_size = 18)
+figure3_2 <- plot_grid(ILC_cluster, NULL, ILC_distribution, labels = c('(B)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1.2, 0.1, 1))
+figure3_3 <- plot_grid(ILC_Cyto_Chemo, labels = c('(D)'), label_size = 18)
+figure3_4 <- plot_grid(ILC_ATF, Effector_function, labels = c('(E)', '(F)'), label_size = 18, nrow = 1, rel_widths = c(1.7, 1))
+
+figure3 <- plot_grid(figure3_1, figure3_2, figure3_3, figure3_4,
+  nrow = 4,
+  ncol = 1,
+  rel_heights = c(1, 1.2, 1.6, 1.6)
+)
+
+figure3
+```
+
+```{r Paper figure S1 layout, fig.width = 12, fig.height = 12}
+# Generate the plot in paper figure form
+figureS1 <- plot_grid(markers_heatmap,
+                      labels = c(''), label_size = 18
+                      )
+
+figureS1
+```
+
+# Data save
+
+```{r Output the figure}
+# Create a folder for the figures
+dir.create("./Figures", showWarnings = FALSE)
+
+# Save the figures
+ggsave2(plot = figure2, path = "./Figures", "Figure2.tiff", device = "tiff", dpi = 300, bg = "white", width = 16, height = 20, units = "in")
+
+ggsave2(plot = figure3, path = "./Figures", "Figure3.tiff", device = "tiff", dpi = 300, bg = "white", width = 14, height = 18, units = "in")
+
+ggsave2(plot = figureS1, path = "./Figures", "FigureS1.tiff", device = "tiff", dpi = 300, bg = "white", width = 12, height = 12, units = "in")
+```
+
+```{r Save RDS}
+saveRDS(Thy1, file = "CD45_Thy1_DP_labeled_paper_ver.rds")
+saveRDS(ILC, file = "CD45_Thy1_ILC_paper_ver.rds")
+```
+
+
+<details>
+  <summary>**Session Info**</summary>
+```{r sessionInfo}
+sessionInfo()
+```
+

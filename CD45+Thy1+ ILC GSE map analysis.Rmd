@@ -1,0 +1,400 @@
+---
+title: "CD45+Thy1+ ILC GSE map analysis"
+output:
+   html_document: 
+     theme: united
+     df_print: kable
+     toc: yes
+date: 'Compiled: `r format(Sys.Date(), "%B %d, %Y")`'
+---
+
+```{r setup, include = FALSE}
+all_times <- list()  # store the time for each chunk
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- difftime(Sys.time(), now, units = "secs")
+      all_times[[options$label]] <<- res
+    }
+  }
+}))
+knitr::opts_chunk$set(
+  tidy = TRUE,
+  tidy.opts = list(width.cutoff = 95),
+  message = FALSE,
+  warning = FALSE,
+  time_it = TRUE
+)
+```
+
+
+# Universal packages
+
+```{r Load packages}
+library(Seurat)
+library(tidyverse)
+library(patchwork)
+library(cowplot)
+```
+
+
+# Data input
+
+```{r Load SCT processed ILC data}
+# Load ILC data
+
+# ILC
+ILC <- readRDS("CD45_Thy1_ILC_paper_ver.rds")
+
+
+# Set RNA assay as default
+DefaultAssay(ILC) <- "RNA"
+head(x = ILC[[]])
+```
+
+
+# ILC cluster Visualization
+
+```{r Set Reveal ILC clusters}
+# Show the numbers for ILC
+table(ILC@meta.data$cell_type, split.by = ILC@meta.data$treatment)
+
+# Plot the ILC clusters
+DimPlot(ILC, group.by = "cell_type", label = T, repel =  T)
+DimPlot(ILC, group.by = "treatment", label = F) + ggtitle(NULL)
+```
+
+
+# ILC subsets
+
+```{r ILC subsets}
+# ILC1 and NK
+ILC1_NK <- ILC %>%
+    subset(idents = c("ILC1", "NK", "ST2 NK"), invert = FALSE) %>%
+    SetIdent(value = "treatment")
+
+table(ILC1_NK@meta.data$cell_type, split.by = ILC1_NK@meta.data$treatment)
+
+# ILC2
+ILC2 <- ILC %>%
+    subset(idents = c("Areg ILC2", "IL-13 ILC2", "IL-10 ILC2", "Quiescent ILC2", "KLRG1 ILC2", "LTB ILC2"),
+        invert = FALSE)
+
+table(ILC2@meta.data$cell_type, split.by = ILC2@meta.data$treatment)
+```
+
+
+# Packages for differential expression with volcano plot and enrichment network
+
+```{r Load the packages for enrichment network}
+# Load the package (clusterProfiler)
+library(clusterProfiler)
+
+# Set the desired organism below
+# See all annotations available here: http://bioconductor.org/packages/release/BiocViews.html#___OrgDb
+organism = "org.Mm.eg.db"
+#BiocManager::install(organism, character.only = TRUE)
+library(organism, character.only = TRUE)
+
+# Load the package to do enrichment map (enrichplot)
+library(enrichplot)
+
+# Load the package to turn the first letter uppercase with str_to_title (stringr)
+library(stringr)
+```
+
+```{r Load the package for volcano plot}
+# Load the package for volcano plot
+library(EnhancedVolcano)
+```
+
+
+# NK and ILC1 gene set enrichment analysis
+
+```{r ILC1_NK differential expression}
+ILC1_NK <- SetIdent(ILC1_NK, value = "treatment")
+
+# Find the differential expressed genes in ILC1_NK
+ILC1_NK_differential <- FindMarkers(ILC1_NK, ident.1 = "Alt.BPC", ident.2 = "Alt", min.cells.group = 10, test.use = "wilcox_limma", only.pos = FALSE, assay = "RNA", slot = "scale.data")
+
+ILC1_NK_differential <- ILC1_NK_differential[order(abs(ILC1_NK_differential$avg_log2FC), decreasing = T), ]
+
+head(ILC1_NK_differential)
+
+# Find the top 5 (positive and negative) differential expression in ILC2
+ILC1_NK_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC > 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> ILC1_NK_differential_top5pos
+
+head(ILC1_NK_differential_top5pos)
+
+ILC1_NK_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC < 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> ILC1_NK_differential_top5neg
+
+head(ILC1_NK_differential_top5neg)
+```
+
+```{r ILC1_NK DE Volcano plot, fig.width = 6, fig.height = 6}
+# Plot the top 10 differential genes with volcano plot
+ILC1_NK_volcano <- EnhancedVolcano(ILC1_NK_differential,
+    lab = rownames(ILC1_NK_differential),
+    selectLab = c(rownames(ILC1_NK_differential_top5pos), rownames(ILC1_NK_differential_top5neg)),
+    x = 'avg_log2FC',
+    y = 'p_val',
+    title = 'ILC1 and NK Alt.BPC vs. Alt',
+    pCutoff = 10e-7,
+    FCcutoff = 0.5,
+    pointSize = 3.0,
+    labSize = 6.0,
+    drawConnectors = TRUE,
+    widthConnectors = 0.75,
+    colConnectors = 'black') +
+  labs(subtitle = NULL)
+
+ILC1_NK_volcano
+```
+
+```{r ILC1_NK GSEA map, fig.height = 16, fig.width = 16}
+# Find the top 50% significant differential expression in ILC1_NK
+ILC1_NK_differential %>%
+  filter(abs(ILC1_NK_differential$avg_log2FC) > 0.5 & p_val < 0.05) %>%
+  arrange(p_val) -> ILC1_NK_differential_overTHR
+
+ILC1_NK_differential_overTHR %>%
+  top_frac(-0.5, ILC1_NK_differential_overTHR$p_val) -> ILC1_NK_differential_Q2
+
+head(ILC1_NK_differential_Q2)
+tail(ILC1_NK_differential_Q2)
+
+# Convert gene label from SYMBOL to ENTREZID
+ILC1_NK_gene_id <- bitr(rownames(ILC1_NK_differential_Q2), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db", drop = FALSE)
+
+head(ILC1_NK_gene_id)
+tail(ILC1_NK_gene_id)
+
+# Create a gene rank based on the gene expression fold change
+ILC1_NK_gene_list <- setNames(ILC1_NK_differential_Q2$avg_log2FC, ILC1_NK_gene_id$ENTREZID)
+
+head(ILC1_NK_gene_list)
+tail(ILC1_NK_gene_list)
+
+# Sort the list in decreasing order (required for clusterProfiler)
+ILC1_NK_gene_rank = sort(ILC1_NK_gene_list, decreasing = TRUE)
+
+head(ILC1_NK_gene_rank)
+
+# Perform GSE analysis
+ILC1_NK_gse <- gseGO(geneList      = ILC1_NK_gene_rank,
+                       ont           = "ALL", 
+                       keyType       = "ENTREZID", 
+                       nPerm         = 10000, 
+                       minGSSize     = 10, 
+                       maxGSSize     = 1000, 
+                       pvalueCutoff  = 0.05, 
+                       verbose       = TRUE, 
+                       OrgDb         = "org.Mm.eg.db", 
+                       pAdjustMethod = "none",
+                       by = "fgsea")
+# ont setting: one of "BP", "MF", and "CC" subontologies, or "ALL" for all three
+# Biological Process (BP):  	biological_process [GO:0008150] <30>
+# Cellular Component (CC):  	cellular_component [GO:0005575] <22>
+# Molecular Function (MF):  	molecular_function [GO:0003674] <15>
+
+
+# Select out the top 20 terms based on |enrichmentScore|
+ILC1_NK_gse %>%
+  filter(abs(enrichmentScore) > 0.5) %>%
+  filter(ONTOLOGY == "CC" | ONTOLOGY == "MF") %>%
+  top_n(-20, pvalue) %>%
+  arrange(desc(leading_edge)) -> ILC1_NK_gse_top20
+
+
+# Convert gene ID to Symbol
+ILC1_NK_gse <- setReadable(ILC1_NK_gse, 'org.Mm.eg.db', 'ENTREZID')
+
+ILC1_NK_gse_top20 <- setReadable(ILC1_NK_gse_top20, 'org.Mm.eg.db', 'ENTREZID')
+head(ILC1_NK_gse_top20, 20)
+
+# CategorySize can be either 'pvalue' or 'geneNum'
+ILC1_NK_gse_map <- cnetplot(ILC1_NK_gse_top20, categorySize="pvalue", foldChange=ILC1_NK_gene_rank, colorEdge = TRUE, showCategory = 10) +
+  labs(title = "ILC1 and NK enrichment map") +
+  theme(plot.title = element_text(size=16, face="bold"))
+
+ILC1_NK_gse_map
+```
+
+
+# ILC2 gene set enrichment and analysis
+
+```{r ILC2 differential expression}
+ILC2 <- SetIdent(ILC2, value = "treatment")
+
+# Find the differential expressed genes in ILC2
+ILC2_differential <- FindMarkers(ILC2, ident.1 = "Alt.BPC", ident.2 = "Alt", min.cells.group = 10, test.use = "wilcox_limma", only.pos = FALSE, assay = "RNA", slot = "scale.data")
+
+ILC2_differential <- ILC2_differential[order(abs(ILC2_differential$avg_log2FC), decreasing = T), ]
+
+head(ILC2_differential)
+
+# Find the top 5 (positive and negative) differential expression in ILC2
+ILC2_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC > 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> ILC2_differential_top5pos
+
+head(ILC2_differential_top5pos)
+
+ILC2_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC < 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> ILC2_differential_top5neg
+
+head(ILC2_differential_top5neg)
+```
+
+```{r ILC2 DE Volcano plot, fig.width = 6, fig.height = 6}
+# Plot the top 10 differential genes with volcano plot
+ILC2_volcano <- EnhancedVolcano(ILC2_differential,
+    lab = rownames(ILC2_differential),
+    selectLab = c(rownames(ILC2_differential_top5pos), rownames(ILC2_differential_top5neg)),
+    x = 'avg_log2FC',
+    y = 'p_val',
+    title = 'ILC2 Alt.BPC vs. Alt',
+    pCutoff = 10e-50,
+    FCcutoff = 0.5,
+    pointSize = 3.0,
+    labSize = 6.0,
+    drawConnectors = TRUE,
+    widthConnectors = 0.75,
+    colConnectors = 'black') +
+  labs(subtitle = NULL)
+
+ILC2_volcano
+```
+
+```{r ILC2 GSEA map, fig.height = 16, fig.width = 16}
+# Find the top 50% significant differential expression in ILC2
+ILC2_differential %>%
+  filter(abs(ILC2_differential$avg_log2FC) > 0.5 & p_val < 0.05) %>%
+  arrange(p_val) -> ILC2_differential_overTHR
+
+ILC2_differential_overTHR %>%
+  top_frac(-0.5, ILC2_differential_overTHR$p_val) -> ILC2_differential_Q2
+
+head(ILC2_differential_Q2)
+tail(ILC2_differential_Q2)
+
+# Convert gene label from SYMBOL to ENTREZID
+ILC2_gene_id <- bitr(rownames(ILC2_differential_Q2), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db", drop = FALSE)
+
+head(ILC2_gene_id)
+tail(ILC2_gene_id)
+
+# Create a gene rank based on the gene expression fold change
+ILC2_gene_list <- setNames(ILC2_differential_Q2$avg_log2FC, ILC2_gene_id$ENTREZID)
+
+head(ILC2_gene_list)
+tail(ILC2_gene_list)
+
+# Sort the list in decreasing order (required for clusterProfiler)
+ILC2_gene_rank = sort(ILC2_gene_list, decreasing = TRUE)
+
+head(ILC2_gene_rank)
+
+# Perform GSE analysis
+ILC2_gse <- gseGO(geneList      = ILC2_gene_rank,
+                       ont           = "ALL", 
+                       keyType       = "ENTREZID", 
+                       nPerm         = 10000, 
+                       minGSSize     = 10, 
+                       maxGSSize     = 1000, 
+                       pvalueCutoff  = 0.05, 
+                       verbose       = TRUE, 
+                       OrgDb         = "org.Mm.eg.db", 
+                       pAdjustMethod = "none",
+                       by = "fgsea")
+# ont setting: one of "BP", "MF", and "CC" subontologies, or "ALL" for all three
+# Biological Process (BP):  	biological_process [GO:0008150] <30>
+# Cellular Component (CC):  	cellular_component [GO:0005575] <22>
+# Molecular Function (MF):  	molecular_function [GO:0003674] <15>
+
+
+# Select out the top 20 terms based on |enrichmentScore|
+ILC2_gse %>%
+  filter(abs(enrichmentScore) > 0.5) %>%
+  filter(ONTOLOGY == "CC" | ONTOLOGY == "MF") %>%
+  top_n(-20, pvalue) %>%
+  arrange(desc(leading_edge)) -> ILC2_gse_top20
+
+
+# Convert gene ID to Symbol
+ILC2_gse <- setReadable(ILC2_gse, 'org.Mm.eg.db', 'ENTREZID')
+
+ILC2_gse_top20 <- setReadable(ILC2_gse_top20, 'org.Mm.eg.db', 'ENTREZID')
+head(ILC2_gse_top20, 20)
+
+# CategorySize can be either 'pvalue' or 'geneNum'
+ILC2_gse_map <- cnetplot(ILC2_gse_top20, categorySize="pvalue", foldChange=ILC2_gene_rank, colorEdge = TRUE, showCategory = 10) +
+  labs(title = "ILC2 enrichment map") +
+  theme(plot.title = element_text(size=16, face="bold"))
+
+ILC2_gse_map
+```
+
+
+# Data oupput
+
+```{r GSE map for paper, fig.width = 20, fig.height = 20}
+# Generate the plot in paper figure form
+figure6_1 <- plot_grid(ILC1_NK_volcano, NULL, ILC1_NK_gse_map, labels = c('(A)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 2))
+figure6_2 <- plot_grid(ILC2_volcano, NULL, ILC2_gse_map, labels = c('(B)', '(D)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 2))
+
+figure6 <- plot_grid(figure6_1, figure6_2,
+  nrow = 2,
+  ncol = 1,
+  rel_heights = c(1, 1)
+  )
+
+figure6
+```
+
+
+# Data save
+
+```{r Output the figures}
+# Create a folder for the figures
+dir.create("./Figures", showWarnings = FALSE)
+
+# Save the figure
+ggsave2(plot = figure6, path = "./Figures", "Figure6.tiff", device = "tiff", dpi = 300, bg = "white", width = 20, height = 20, units = "in")
+```
+
+```{r Output the CSV files}
+# Create a folder for CSV files
+dir.create("./CSV", showWarnings = FALSE)
+
+# Export to csv
+write.csv(ILC1_NK_differential, file.path("./CSV", "ILC1_NK_differential.csv"))
+write.csv(ILC1_NK_gse, file.path("./CSV", "ILC1_NK_gse.csv"))
+
+write.csv(ILC2_differential, file.path("./CSV", "ILC2_differential.csv"))
+write.csv(ILC2_gse, file.path("./CSV", "ILC2_gse.csv"))
+```
+
+
+<details>
+  <summary>**Session Info**</summary>
+```{r}
+sessionInfo()
+```
+

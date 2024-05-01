@@ -1,0 +1,507 @@
+---
+title: "CD45+Thy1+ ILC TF activity analysis and HSP expression"
+output:
+   html_document: 
+     theme: united
+     df_print: kable
+     toc: yes
+date: 'Compiled: `r format(Sys.Date(), "%B %d, %Y")`'
+---
+
+```{r setup, include = FALSE}
+all_times <- list()  # store the time for each chunk
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- difftime(Sys.time(), now, units = "secs")
+      all_times[[options$label]] <<- res
+    }
+  }
+}))
+knitr::opts_chunk$set(
+  tidy = TRUE,
+  tidy.opts = list(width.cutoff = 95),
+  message = FALSE,
+  warning = FALSE,
+  time_it = TRUE
+)
+```
+
+
+# Universal packages
+
+```{r Load packages}
+library(Seurat)
+library(tidyverse)
+library(patchwork)
+library(cowplot)
+```
+
+
+# Data input (CD45+Thy1- and CD45-)
+
+```{r Load SCT processed Ptprc and Structural data}
+# Load Sensitivity 2 subsetted data
+
+# CD45+ Thy1-
+Ptprc <- readRDS("CD45_Thy1_neg_labeled_paper_ver.rds")
+
+# CD45-
+Structural <- readRDS("CD45_neg_labeled_paper_ver.rds")
+
+# ".." is a special directory name meaning “the directory above the current one” or the parent directory
+
+# Set RNA assay as default
+DefaultAssay(Ptprc) <- "RNA"
+head(x = Ptprc[[]])
+
+DefaultAssay(Structural) <- "RNA"
+head(x = Structural[[]])
+```
+
+
+# CD45+ Thy1- cluster Visualization
+
+```{r Reveal CD45+ Thy1- clusters}
+# Show the numbers for CD45+ Thy1-
+table(Ptprc@meta.data$cell_type, split.by = Ptprc@meta.data$treatment)
+
+# Plot the CD45+ Thy1- clusters
+DimPlot(Ptprc, group.by = "cell_type", label = T, repel =  T)
+DimPlot(Ptprc, group.by = "treatment", label = F) + ggtitle(NULL)
+```
+
+
+# CD45- cluster Visualization
+
+```{r Reveal CD45- clusters}
+# Show the numbers for CD45-
+table(Structural@meta.data$cell_type, split.by = Structural@meta.data$treatment)
+
+# Plot the CD45- clusters
+DimPlot(Structural, group.by = "cell_type", label = T, repel =  T)
+DimPlot(Structural, group.by = "treatment", label = F) + ggtitle(NULL)
+```
+
+
+# Packages for volcano plot
+
+```{r Load the package for volcano plot}
+# Load the package for volcano plot
+library(EnhancedVolcano)
+```
+
+
+# CD45+ Thy1- differential expression
+
+```{r Ptprc differential expression}
+Ptprc <- SetIdent(Ptprc, value = "treatment")
+
+# Find the differential expressed genes in Ptprc
+Ptprc_differential <- FindMarkers(Ptprc, ident.1 = "Alt.BPC", ident.2 = "Alt", min.cells.group = 10, test.use = "wilcox_limma", only.pos = FALSE, assay = "RNA", slot = "scale.data")
+
+Ptprc_differential <- Ptprc_differential[order(abs(Ptprc_differential$avg_log2FC), decreasing = T), ]
+
+head(Ptprc_differential)
+
+# Find the top 5 (positive and negative) differential expression in ILC2
+Ptprc_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC > 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> Ptprc_differential_top5pos
+
+head(Ptprc_differential_top5pos)
+
+Ptprc_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC < 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> Ptprc_differential_top5neg
+
+head(Ptprc_differential_top5neg)
+```
+
+```{r Ptprc DE Volcano plot, fig.width = 6, fig.height = 6}
+# Plot the top 10 differential genes with volcano plot
+Ptprc_volcano <- EnhancedVolcano(Ptprc_differential,
+    lab = rownames(Ptprc_differential),
+    selectLab = c(rownames(Ptprc_differential_top5pos), rownames(Ptprc_differential_top5neg)),
+    x = 'avg_log2FC',
+    y = 'p_val',
+    title = 'CD45+Thy1- Alt.BPC vs. Alt',
+    pCutoff = 10e-10,
+    FCcutoff = 0.5,
+    pointSize = 3.0,
+    labSize = 6.0,
+    drawConnectors = TRUE,
+    widthConnectors = 0.75,
+    colConnectors = 'black') +
+  labs(subtitle = NULL)
+
+Ptprc_volcano
+```
+
+
+# CD45- differential expression
+
+```{r Structural differential expression}
+Structural <- SetIdent(Structural, value = "treatment")
+
+# Find the differential expressed genes in Structural
+Structural_differential <- FindMarkers(Structural, ident.1 = "Alt.BPC", ident.2 = "Alt", min.cells.group = 10, test.use = "wilcox_limma", only.pos = FALSE, assay = "RNA", slot = "scale.data")
+
+Structural_differential <- Structural_differential[order(abs(Structural_differential$avg_log2FC), decreasing = T), ]
+
+head(Structural_differential)
+
+# Find the top 5 (positive and negative) differential expression in ILC2
+Structural_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC > 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> Structural_differential_top5pos
+
+head(Structural_differential_top5pos)
+
+Structural_differential %>%
+  filter(abs(avg_log2FC) > 0.5) %>%
+  filter(avg_log2FC < 0) %>%
+  top_n(-5, p_val) %>%
+  arrange(p_val) -> Structural_differential_top5neg
+
+head(Structural_differential_top5neg)
+```
+
+```{r Structural DE Volcano plot, fig.width = 6, fig.height = 6}
+# Plot the top 10 differential genes with volcano plot
+Structural_volcano <- EnhancedVolcano(Structural_differential,
+    lab = rownames(Structural_differential),
+    selectLab = c(rownames(Structural_differential_top5pos), rownames(Structural_differential_top5neg)),
+    x = 'avg_log2FC',
+    y = 'p_val',
+    title = 'CD45- Alt.BPC vs. Alt',
+    pCutoff = 10e-20,
+    FCcutoff = 0.5,
+    pointSize = 3.0,
+    labSize = 6.0,
+    drawConnectors = TRUE,
+    widthConnectors = 0.75,
+    colConnectors = 'black') +
+  labs(subtitle = NULL)
+
+Structural_volcano
+```
+
+
+# HSP gene expression
+
+```{r HSP gene set}
+# HSP genes
+HSP <- c("Hsp1a1", "Hspa5", "Hspa8", "Hsp90aa1", "Hsp90ab1", "Hsp90b1")
+```
+
+```{r HSP gene expression, fig.width = 5, fig.height = 5}
+# HSP expression in other leukocytes
+HSP_Ptprc <- DotPlot(Ptprc, features = c(HSP), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("HSP genes in CD45+Thy1-")
+
+HSP_Ptprc
+
+
+# HSP expression in structural cells
+HSP_Structural <- DotPlot(Structural, features = c(HSP), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("HSP genes in CD45-")
+
+HSP_Structural
+```
+
+
+# Data input (ILC)
+
+```{r Load SCT processed ILC data}
+# Load ILC data
+
+# ILC
+ILC <- readRDS("CD45_Thy1_ILC_paper_ver.rds")
+
+
+# Set RNA assay as default
+DefaultAssay(ILC) <- "RNA"
+head(x = ILC[[]])
+```
+
+
+# ILC cluster Visualization
+
+```{r Set Reveal ILC clusters}
+# Show the numbers for ILC
+table(ILC@meta.data$cell_type, split.by = ILC@meta.data$treatment)
+
+# Plot the ILC clusters
+DimPlot(ILC, group.by = "cell_type", label = T, repel =  T)
+DimPlot(ILC, group.by = "treatment", label = F) + ggtitle(NULL)
+```
+
+
+# HSP receptor gene expression
+
+```{r HSP receptor gene set}
+# HSP receptor genes
+HSPR <- c("Olr1", "Scarf1", "Stab1", "Klrc1", "Klrc2", "Klrk1")
+```
+
+```{r HSP receptor gene expression, fig.width = 5, fig.height = 5}
+# HSP expression in other leukocytes
+HSPR_ILC <- DotPlot(ILC, features = c(HSPR), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("HSP receptor genes in ILC")
+
+HSPR_ILC
+```
+
+
+# Packages for transcription factor activity inference  analysis
+
+```{r Load package for transcription factor activity analysis}
+# Load the package (decoupleR)
+library(decoupleR)
+
+# Only needed for data handling and plotting
+library(pheatmap)
+```
+
+
+# TF activity inference with Weighted Mean
+
+```{r Load CollecTRI network}
+# Load the database of TFs and their transcriptional targets
+net <- get_collectri(organism='mouse', split_complexes=FALSE)
+
+head(net)
+```
+
+```{r Calculate the pseudotime on averall ILC}
+# Run the Weighted Mean method (wmean)
+# Extract the normalized log-transformed counts
+ILC.mat <- as.matrix(ILC@assays$RNA@data)
+
+# Run wmean
+ILC.acts <- run_wmean(mat=ILC.mat, net=net, .source='source', .target='target',
+                  .mor='mor', times = 100, minsize = 5)
+head(ILC.acts)
+
+# Extract norm_wmean and store it in tfswmean
+ILC[['tfswmean']] <- ILC.acts %>%
+  filter(statistic == 'norm_wmean') %>%
+  pivot_wider(id_cols = 'source', names_from = 'condition',
+              values_from = 'score') %>%
+  column_to_rownames('source') %>%
+  Seurat::CreateAssayObject(.)
+
+# Change assay
+DefaultAssay(object = ILC) <- "tfswmean"
+
+# Scale the data (ILC)
+ILC <- ScaleData(ILC)
+ILC@assays$tfswmean@data <- ILC@assays$tfswmean@scale.data
+```
+
+
+# Exploration of the overall TF activities
+
+```{r ILC Ahr activity and epxression , fig.width = 20, fig.height = 4}
+ILC_Ahr_p1 <- DimPlot(ILC, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, pt.size = 0.5) + 
+  NoLegend() + ggtitle('Cell types')
+
+ILC_Ahr_p2 <- (FeaturePlot(ILC, features = c("Ahr"), split.by = "treatment") & 
+  scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
+  theme(legend.position = c(1, 0.5))
+
+DefaultAssay(object = ILC) <- "RNA"
+
+ILC_Ahr_p3 <- FeaturePlot(ILC, features = c("Ahr"), split.by = "treatment") +
+  theme(legend.position = c(0.99, 0.5))
+
+DefaultAssay(object = ILC) <- "tfswmean"
+
+plot_grid(NULL, NULL, NULL, ILC_Ahr_p1, ILC_Ahr_p2, ILC_Ahr_p3, nrow = 2, ncol = 3, rel_heights = c(0.1, 1), rel_widths = c(1, 2, 2), labels = c('Cluster layout', 'AhR activity', 'Ahr expression'), label_size =16)
+
+ILC_Ahr <- plot_grid(NULL, ILC_Ahr_p2, nrow = 2, rel_heights = c(0.1, 1), labels = "AhR activity in ILC", label_size =16)
+
+ILC_Ahr
+```
+
+
+# Split of the data by treatment
+
+```{r Split the data}
+ILC <- SetIdent(ILC, value = "treatment")
+
+# BPC
+BPC <- ILC %>% 
+  subset(idents = c("Alt.BPC"), invert = FALSE) %>%
+  SetIdent(value = "cell_type")
+
+table(BPC@meta.data$cell_type, split.by = BPC@meta.data$treatment)
+
+
+# Alt
+Alt <- ILC %>% 
+  subset(idents = c("Alt"), invert = FALSE) %>%
+  SetIdent(value = "cell_type")
+
+table(Alt@meta.data$cell_type, split.by = Alt@meta.data$treatment)
+```
+
+
+# Exploration of the Alt TF activities
+
+```{r TF analysis shared settings}
+# Select top variable TFs
+n_tfs <- 60
+
+# Choose color palette
+palette_length = 100
+my_color = colorRampPalette(c("Darkblue", "white","red"))(palette_length)
+
+my_breaks <- c(seq(-3, 0, length.out=ceiling(palette_length/2) + 1),
+               seq(0.05, 3, length.out=floor(palette_length/2)))
+```
+
+```{r Alt TF exploration, fig.width = 12, fig.height = 4}
+# Extract activities from object as a long dataframe
+Alt.df <- t(as.matrix(Alt@assays$tfswmean@data)) %>%
+  as.data.frame() %>%
+  mutate(cluster = Idents(Alt)) %>%
+  pivot_longer(cols = -cluster, names_to = "source", values_to = "score") %>%
+  group_by(cluster, source) %>%
+  summarise(mean = mean(score))
+
+# Get top tfs with more variable means across clusters
+Alt.tfs <- Alt.df %>%
+  group_by(source) %>%
+  summarise(std = sd(mean)) %>%
+  arrange(-abs(std)) %>%
+  head(n_tfs) %>%
+  pull(source)
+
+# Subset long data frame to top TFs and transform to wide matrix
+top_Alt.acts_mat <- Alt.df %>%
+  filter(source %in% Alt.tfs) %>%
+  pivot_wider(id_cols = 'cluster', names_from = 'source',
+              values_from = 'mean') %>%
+  column_to_rownames('cluster') %>%
+  as.matrix()
+
+
+# Plot
+pheatmap(top_Alt.acts_mat, border_color = NA, color=my_color, breaks = my_breaks) 
+```
+
+```{r Alt Ahr expression, fig.width = 13, fig.height = 4}
+Alt_Ahr_p1 <- DimPlot(Alt, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, pt.size = 0.5) + 
+  NoLegend() + ggtitle('Cell types')
+Alt_Ahr_p2 <- (FeaturePlot(Alt, features = c("Ahr")) & 
+  scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
+  ggtitle('AhR activity in Alt')
+DefaultAssay(object = Alt) <- "RNA"
+Alt_Ahr_p3 <- FeaturePlot(Alt, features = c("Ahr")) + ggtitle('Ahr expression in Alt')
+DefaultAssay(object = Alt) <- "tfswmean"
+
+plot_grid(Alt_Ahr_p1, Alt_Ahr_p2, Alt_Ahr_p3, nrow = 1, rel_widths = c(1, 1.3, 1.3))
+```
+
+
+# Exploration of the Alt.BPC TF activities
+
+```{r BPC TF exploration, fig.width = 12, fig.height = 4}
+# Extract activities from object as a long dataframe
+BPC.df <- t(as.matrix(BPC@assays$tfswmean@data)) %>%
+  as.data.frame() %>%
+  mutate(cluster = Idents(BPC)) %>%
+  pivot_longer(cols = -cluster, names_to = "source", values_to = "score") %>%
+  group_by(cluster, source) %>%
+  summarise(mean = mean(score))
+
+# Get top tfs with more variable means across clusters
+BPC.tfs <- BPC.df %>%
+  group_by(source) %>%
+  summarise(std = sd(mean)) %>%
+  arrange(-abs(std)) %>%
+  head(n_tfs) %>%
+  pull(source)
+
+# Subset long data frame to top TFs and transform to wide matrix
+top_BPC.acts_mat <- BPC.df %>%
+  filter(source %in% BPC.tfs) %>%
+  pivot_wider(id_cols = 'cluster', names_from = 'source',
+              values_from = 'mean') %>%
+  column_to_rownames('cluster') %>%
+  as.matrix()
+
+
+# Plot
+pheatmap(top_BPC.acts_mat, border_color = NA, color=my_color, breaks = my_breaks)
+```
+
+```{r BPC Ahr expression, fig.width = 13, fig.height = 4}
+BPC_Ahr_p1 <- DimPlot(BPC, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, pt.size = 0.5) + 
+  NoLegend() + ggtitle('Cell types')
+BPC_Ahr_p2 <- (FeaturePlot(BPC, features = c("Ahr")) & 
+  scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
+  ggtitle('AhR activity in Alt.BPC')
+DefaultAssay(object = BPC) <- "RNA"
+BPC_Ahr_p3 <- FeaturePlot(BPC, features = c("Ahr")) + ggtitle('Ahr expression in Alt.BPC')
+DefaultAssay(object = BPC) <- "tfswmean"
+
+plot_grid(BPC_Ahr_p1, BPC_Ahr_p2, BPC_Ahr_p3, nrow = 1, rel_widths = c(1, 1.3, 1.3))
+```
+
+
+# Data oupput
+
+```{r HSP and AhR activity for paper, fig.width = 12, fig.height = 16}
+# Generate the plot in paper figure form
+figure7_1 <- plot_grid(Ptprc_volcano, NULL, HSP_Ptprc, labels = c('(A)', '(C)'), label_size = 18, nrow = 1, ncol = 3, rel_widths = c(1.25, 0.05, 1))
+figure7_2 <- plot_grid(Structural_volcano, HSP_Structural, labels = c('(B)', '(D)'), label_size = 18, nrow = 1, ncol = 2, rel_widths = c(1.2, 1))
+figure7_3 <- plot_grid(NULL, ILC_Ahr_p2, NULL, nrow = 3, ncol = 1, rel_heights = c(0.2, 2, 1))
+figure7_4 <- plot_grid(HSPR_ILC, figure7_3, labels = c('(E)', '(F)'), label_size = 18, nrow = 1, ncol = 2, rel_widths = c(0.8, 1))
+
+
+figure7 <- plot_grid(figure7_1, figure7_2, figure7_4,
+                     nrow = 3,
+                     ncol = 1,
+                     rel_heights = c(1.2, 1.2, 1.1)
+  )
+
+figure7
+```
+
+
+# Data save
+
+```{r Output the figures}
+# Create a folder for the figures
+dir.create("./Figures", showWarnings = FALSE)
+
+# Save the figure
+ggsave2(plot = figure7, path = "./Figures", "Figure7.tiff", device = "tiff", dpi = 300, bg = "white", width = 12, height = 16, units = "in")
+```
+
+```{r Output the CSV files}
+# Create a folder for CSV files
+dir.create("./CSV", showWarnings = FALSE)
+
+# Export to csv
+write.csv(BPC.df, file.path("./CSV", "Alt.BPC_ILC_TF_activities.csv"))
+write.csv(Alt.df, file.path("./CSV", "Alt_ILC_TF_activities.csv"))
+```
+
+
+<details>
+  <summary>**Session Info**</summary>
+```{r sessionInfo}
+sessionInfo()
+```
+</details>
+

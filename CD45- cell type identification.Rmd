@@ -1,0 +1,284 @@
+---
+title: "CD45- cell type identification"
+output:
+   html_document: 
+     theme: united
+     df_print: kable
+     toc: yes
+date: 'Compiled: `r format(Sys.Date(), "%B %d, %Y")`'
+---
+
+```{r setup, include = FALSE}
+all_times <- list()  # store the time for each chunk
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- difftime(Sys.time(), now, units = "secs")
+      all_times[[options$label]] <<- res
+    }
+  }
+}))
+knitr::opts_chunk$set(
+  tidy = TRUE,
+  tidy.opts = list(width.cutoff = 95),
+  message = FALSE,
+  warning = FALSE,
+  time_it = TRUE
+)
+```
+
+
+# Universal packages
+
+```{r Load packages}
+library(Seurat)
+library(tidyverse)
+library(patchwork)
+library(cowplot)
+```
+
+
+# Data input
+
+```{r Load SCT processed data}
+# Load V5_sen2 subsetted data
+Structural <- readRDS("../Sensitivity_2_SCT_Ptprc_neg_Sub_log_final.rds")
+
+head(x = Structural[[]])
+```
+
+```{r Set RNA assay as default}
+# Show the numbers for the new clusters
+table(Structural@meta.data$seurat_clusters, split.by = Structural@meta.data$treatment)
+
+# Set RNA assay as default
+DefaultAssay(Structural) <- "RNA"
+
+plot_grid(ncol = 2,
+          FeaturePlot(Structural, features = c("Ptprc"), slot = "scale.data") + NoAxes() + NoLegend(),
+          VlnPlot(Structural, features = c("Ptprc"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+          FeaturePlot(Structural, features = c("Thy1"), slot = "scale.data") + NoAxes() + NoLegend(),
+          VlnPlot(Structural, features = c("Thy1"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+)
+```
+
+
+# Cluster Visualization
+
+```{r Visualize the new clusters, fig.width = 16, fig.height = 20}
+# Plot the new clusters
+Sub_layout1 <- plot_grid(ncol = 2,
+                         DimPlot(Structural, group.by = "seurat_clusters", label = T),
+                         DimPlot(Structural, group.by = "treatment", label = F) + ggtitle(NULL)
+                         )
+
+Sub_layout2 <- plot_grid(ncol = 4,
+                         FeaturePlot(Structural, features = c("Mustn1")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Mustn1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Acta2")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Acta2"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Epcam")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Epcam"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Vim")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Vim"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Col6a2")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Col6a2"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Cdh11")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Cdh11"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Muc5b")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Muc5b"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Muc5ac")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Muc5ac"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Foxj1")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Foxj1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Ccdc17")) + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Ccdc17"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+                         )
+
+(Sub_layout1)/
+  (Sub_layout2) +
+  plot_layout(heights = c(1, 4))
+
+Sub_layout3 <- plot_grid(ncol = 4,
+                         FeaturePlot(Structural, features = c("Clic5"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Clic5"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Krt7"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Krt7"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Sftpc"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Sftpc"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Abca3"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Abca3"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Aldh1a1"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Aldh1a1"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Scgb1a1"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Scgb1a1"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Muc4"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Muc4"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Il33"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Il33"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Ccl11"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Ccl11"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(Structural, features = c("Cxcl1"), slot = "scale.data") + NoAxes() + NoLegend(),
+                         VlnPlot(Structural, features = c("Cxcl1"), assay ="RNA", pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+                         )
+
+(Sub_layout1)/
+  Sub_layout3 +
+  plot_layout(heights = c(1, 4))
+```
+
+
+# Cell type annotation
+
+```{r Add cell type annotation}
+# Airway smooth muscle cell gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Airway%20smooth%20muscle%20cells%27
+# Smooth muscle: Mustn1+ Acta2+ (cluster 7)
+
+# Fibroblast gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Fibroblasts%27
+# Fibroblast: Epcam- Vim+ Col6a2+ Cdh11+ (cluster 1 and 6)
+
+# Airway goblet cell gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Airway%20goblet%20cells%27
+# Goblet: Epcam+ Muc5b+ Muc5ac+ (cluster 0 and 8)
+
+# Lung ciliated cell gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Ciliated%20cells%27
+# Ciliated: Epcam+ Foxj1+ Ccdc17+ (cluster 4)
+
+# Alveolar type I cell gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Pulmonary%20alveolar%20type%20I%20cells%27
+# Alveolar type I (AT1): Epcam+ Clic5+ Krt7+ (cluster5)
+
+# Alveolar type II cell gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Pulmonary%20alveolar%20type%20II%20cells%27
+# Alveolar type II (AT2): Epcam+ Sftpc+ Abca3+ (cluster 2)
+
+# Lung clara cell gene markers:
+# https://www.panglaodb.se/markers.html?cell_type=%27Clara%20cells%27
+# Clara: Epcam+ Aldh1a1+ Muc1+ (cluster 3)
+
+
+# Label the cell type annotation to all the clusters
+new.Structural.ids <- c("Goblet", "Fibroblast", "AT2", "Clara", "Ciliated", "AT1", "Fibroblast", "Smooth muscle", "Goblet")
+names(new.Structural.ids) <- levels(Structural)
+Structural_labeled <- RenameIdents(Structural, new.Structural.ids)
+Structural_labeled <- AddMetaData(Structural_labeled, metadata = Structural_labeled@active.ident, col.name = 'cell_type')
+
+DimPlot(Structural_labeled, group.by = "cell_type", label = T, repel = T) +
+  labs(title = "Structural Subsets") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16))
+
+DimPlot(Structural_labeled, group.by = "cell_type", split.by = "treatment", label = F) +
+  labs(title = "Structural Subsets", subtitle = "Split by treatments") + 
+  theme(legend.text = element_text(size = 14), plot.title = element_text(size = 16), axis.title = element_text(size = 12))
+
+# Show the numbers for the Structural cell across the conditions
+table(Structural_labeled@active.ident, split.by = Structural_labeled@meta.data$treatment)
+```
+
+```{r Ptprc differential markers, fig.height = 4, fig.width = 10}
+# Differential gene sets
+muscle <- c("Mustn1", "Acta2")
+epi <- c("Epcam")
+fibroblast <- c("Col1a1", "Col5a1", "Col14a1", "Col15a1", "Pdgfra", "Ccl11")
+goblet <- c("Muc5b", "Muc5ac")
+ciliated <- c("Foxj1", "Ccdc17")
+AT1 <- c("Clic5", "Krt7")
+AT2 <- c("Sftpc", "Abca3")
+clara <- c("Scgb1a1", "Scgb3a2", "Cyp2f2", "Hp")
+
+
+functional_gene <- list("Muscle" = muscle, "Fibroblast" = fibroblast, "Epi" = epi, "Ciliated" = ciliated, "Goblet" = goblet, "Clara" = clara, "AT1" = AT1, "AT2" = AT2)
+
+Ptprc_differential <- DotPlot(Structural_labeled, features = functional_gene, group.by = "cell_type", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  ggtitle("Differential markers for CD45+Thy1- subsets")
+
+Ptprc_differential
+```
+
+```{r Marker genes for the clusters, fig.width = 12, fig.height = 12}
+# Compute differential expression
+marker_genes <- FindAllMarkers(Structural_labeled, log2FC.threshold = 0.2, test.use = "wilcox", min.pct = 0.1, min.diff.pct = 0.2, only.pos = TRUE, max.cells.per.ident = 50, assay = "RNA")
+
+# Get genes that are positivelly expressed in a cell type and possibly not expressed in the others
+# Select the top 5 to visualize as plots
+marker_genes %>%
+    group_by(cluster) %>%
+    top_n(-5, p_val_adj) -> top5
+
+# Plot Heatmap
+markers_heatmap <- DoHeatmap(Structural_labeled, features = as.character(unique(top5$gene)), group.by = "cell_type", assay = "RNA", slot = 'scale.data', group.bar.height = 0.01, label = F)
+
+markers_heatmap
+```
+
+# Cell distribution among the conditions
+
+```{r Cell type distribution}
+# Set the themes
+xtheme <- theme_bw() +
+  theme(plot.title = element_text(face = "bold",hjust = 0.5, size= 10),
+        axis.text.y = element_text(face = "bold",angle = 0, size = 10, hjust=1),
+        axis.title.y = element_text(face = "bold", size = rel(1.2)),
+        axis.text.x = element_text(face = "bold",angle = 0, size = 10),
+        axis.title.x = element_text(face = "bold", size = rel(1.4)),
+        axis.ticks.x = element_blank(), strip.text = element_text(size=10))
+
+# Reveal the distributional change in Structural cells among the conditions
+Structural.distribution <- data.frame(Structural_labeled@active.ident, Structural_labeled@meta.data$treatment) 
+colnames(Structural.distribution) <- c("Cell_Type", "Treatment")
+Structural.distribution <- Structural.distribution %>% group_by(Cell_Type, Treatment) %>% 
+  summarise(Nb = n()) %>%
+  mutate(C = sum(Nb)) %>%
+  mutate(Percent = Nb/C*100) 
+
+ggplot(Structural.distribution, aes(fill = Treatment, y = Percent, x = Cell_Type)) + 
+  geom_bar(position="fill", stat="identity") + xlab("") + ylab("Proportion") + xtheme + 
+  theme(legend.position='right', axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  theme(legend.title = element_text(size = 14, face = "bold"), legend.text = element_text(size = 14)) +
+  ggtitle("Structural cell distribution across the treatments") +
+  theme(plot.title = element_text(size = 16))
+```
+
+
+# Paper figure layout
+
+```{r Paper figure S5 layout, fig.width = 12, fig.height = 14}
+# Generate the plot in paper figure form
+figureS5 <- plot_grid(Ptprc_differential, markers_heatmap,
+  labels = c('(A)', '(B)'), label_size = 18,
+  nrow = 2,
+  ncol = 1,
+  rel_heights = c(1, 3)
+)
+
+figureS5
+```
+
+
+# Data save
+
+```{r Output the figure}
+# Create a folder for the figures
+dir.create("./Figures", showWarnings = FALSE)
+
+# Save the figures
+ggsave2(plot = figureS5, path = "./Figures", "FigureS5.tiff", device = "tiff", dpi = 300, bg = "white", width = 12, height = 14, units = "in")
+```
+
+```{r Save RDS}
+saveRDS(Structural_labeled, file = "CD45_neg_labeled_paper_ver.rds")
+```
+
+
+<details>
+  <summary>**Session Info**</summary>
+```{r sessionInfo}
+sessionInfo()
+```
+
