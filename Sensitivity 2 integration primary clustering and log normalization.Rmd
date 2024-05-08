@@ -1,0 +1,347 @@
+---
+title: "Alt and Alt+BPC scRNA-seq Sensitivity 2 integration, primary clustering and log-normalization"
+output:
+   html_document: 
+     theme: united
+     df_print: kable
+     toc: yes
+date: 'Compiled: `r format(Sys.Date(), "%B %d, %Y")`'
+---
+
+```{r setup, include = FALSE}
+all_times <- list()  # store the time for each chunk
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- difftime(Sys.time(), now, units = "secs")
+      all_times[[options$label]] <<- res
+    }
+  }
+}))
+knitr::opts_chunk$set(
+  tidy = TRUE,
+  tidy.opts = list(width.cutoff = 95),
+  message = FALSE,
+  warning = FALSE,
+  time_it = TRUE
+)
+```
+
+
+# Universal packages
+
+```{r Load packages}
+library(Seurat)
+library(tidyverse)
+library(patchwork)
+library(cowplot)
+library(BiocParallel)
+```
+
+
+# Sensitivity_2 data input
+
+```{r Load data, warning=FALSE, message=FALSE}
+# Load data C00001873=Alt=CTRL
+CTRL_data <- Read10X(data.dir = "/Volumes/LaCie/PIPseq/C00001873/analysis/filtered_matrix/Sensitivity_2/")
+CTRL <- CreateSeuratObject(counts = CTRL_data)
+Idents(CTRL) <- "orig.ident"
+CTRL <- RenameIdents(CTRL,"SeuratProject"="CTRL")
+CTRL$orig.ident <- Idents(CTRL)
+CTRL$treatment = "Alt"
+
+head(x = CTRL[[]])
+
+# Load data C00001876=Alt+BPC=BPC
+BPC_data <- Read10X(data.dir = "/Volumes/LaCie/PIPseq/C00001876/analysis/filtered_matrix/Sensitivity_2/")
+BPC <- CreateSeuratObject(counts = BPC_data)
+Idents(BPC) <- "orig.ident"
+BPC <- RenameIdents(BPC,"SeuratProject"="BPC")
+BPC$orig.ident <- Idents(BPC)
+BPC$treatment = "Alt.BPC"
+
+head(x = BPC[[]])
+```
+
+
+# Doublet discrimination
+
+```{r Run scDblFinder}
+# Load the packages for finding doublets
+library(scDblFinder)
+library(SingleCellExperiment)
+
+# Convert object into singlecellexperiment
+CTRL.sce <- as.SingleCellExperiment(CTRL)
+CTRL.sce <- scDblFinder(CTRL.sce, samples="treatment", clusters=FALSE, BPPARAM = MulticoreParam(4))
+
+BPC.sce <- as.SingleCellExperiment(BPC)
+BPC.sce <- scDblFinder(BPC.sce, samples="treatment", clusters=FALSE, BPPARAM = MulticoreParam(4))
+
+table(CTRL.sce$scDblFinder.class)
+table(BPC.sce$scDblFinder.class)
+
+# Convert sce object back to seurat
+CTRL <- as.Seurat(CTRL.sce, counts = "counts", data = "logcounts")
+BPC <- as.Seurat(BPC.sce, counts = "counts", data = "logcounts")
+
+head(x = CTRL[[]])
+head(x = BPC[[]])
+```
+
+
+# Doublet removal
+
+```{r Select singlets}
+CTRL <- subset(CTRL, subset = scDblFinder.class  == "singlet")
+
+BPC <- subset(BPC, subset = scDblFinder.class  == "singlet")
+
+table(CTRL$scDblFinder.class)
+table(BPC$scDblFinder.class)
+```
+
+
+# QC metrics visualization
+
+```{r Run QC, fig.width = 8, fig.height = 6}
+# store mitochondrial percentage in object meta data
+CTRL <- PercentageFeatureSet(CTRL, pattern = "^mt-", col.name = 'percent.mt')
+
+BPC <- PercentageFeatureSet(BPC, pattern = "^mt-", col.name = 'percent.mt')
+
+# filter out the low quilty cells
+CTRL <- subset(CTRL, subset = nFeature_RNA > 200 & nFeature_RNA < 4000 & percent.mt < 5)
+
+BPC <- subset(BPC, subset = nFeature_RNA > 200 & nFeature_RNA < 4000 & percent.mt < 5)
+
+head(x = CTRL[[]])
+head(x = BPC[[]])
+
+# Visualize QC metrics as a violin plot
+p11 <- VlnPlot(CTRL, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3) + NoLegend()
+
+p21 <- VlnPlot(BPC, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3) + NoLegend()
+
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
+
+p12 <- FeatureScatter(CTRL, feature1 = "nCount_RNA", feature2 = "percent.mt") + NoLegend()
+p13 <- FeatureScatter(CTRL, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + NoLegend()
+p11 + p12 + p13
+
+p22 <- FeatureScatter(BPC, feature1 = "nCount_RNA", feature2 = "percent.mt") + NoLegend()
+p23 <- FeatureScatter(BPC, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + NoLegend()
+p21 + p22 + p23
+
+# Clean some large files and free the memory
+rm(CTRL_data, CTRL.sce, BPC_data, BPC.sce)
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+
+# SCtransform normalization
+
+```{r Run SCTransform}
+# Apply package [glmGamPoi](https://bioconductor.org/packages/release/bioc/html/glmGamPoi.html) which substantially improves the speed of the learning procedure. It can be invoked by specifying \`method="glmGamPoi". The vst.flavor="v2" internally uses glmGamPoi.
+
+# Run SCtransform V2
+CTRL <- SCTransform(CTRL, vst.flavor = "v2", verbose = FALSE)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+
+BPC <- SCTransform(BPC, vst.flavor = "v2", verbose = FALSE)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+
+# Dimensionality reduction by PCA and UMAP embedding on control dataset Alt (CTRL)
+
+```{r Run CTRL PCA, fig.width = 6, fig.height = 5}
+# Run dimensionality reduction on CTRL
+# These are now standard steps in the Seurat workflow for visualization and clustering
+CTRL <- RunPCA(CTRL, npcs = 30, verbose = FALSE) %>%
+  RunUMAP(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+  FindNeighbors(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+  FindClusters(resolution = 0.7, verbose = FALSE)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+
+p01 <- DimPlot(CTRL, label = T, repel = T) + ggtitle("Unsupervised clustering")
+
+p01
+```
+
+
+# Perform dimensionality reduction by PCA and UMAP embedding for Alt+BPC (BCP)
+
+```{r Run BPC PCA}
+# Run dimensionality reduction on BPC
+BPC <- RunPCA(BPC, npcs = 30, verbose = FALSE)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+
+# Integration prepareation using pearson residuals
+
+```{r Prepare SCT integration}
+# Perform integration using the pearson residuals calculated above. Use the `PrepSCTIntegration()` function after selecting a list of informative features using `SelectIntegrationFeatures()`:
+immune.list <- list(CTRL = CTRL, BPC = BPC)
+features <- SelectIntegrationFeatures(object.list = immune.list, nfeatures = 3000)
+immune.list <- PrepSCTIntegration(object.list = immune.list, anchor.features = features)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+```{r Perform SCT integration}
+# Integrate the two datasets, use the `FindIntegrationAnchors()` function, which takes a list of Seurat objects as input, and use these anchors to integrate the two datasets together with `IntegrateData()`.
+immune.anchors <- FindIntegrationAnchors(object.list = immune.list, normalization.method = "SCT", anchor.features = features)
+immune.combined.sct <- IntegrateData(anchorset = immune.anchors, normalization.method = "SCT")
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+```{r Run Clustering, results='hide', message=FALSE}
+# Cluster the integrated data
+immune.combined.sct <- RunPCA(immune.combined.sct, verbose = FALSE) %>%
+  RunUMAP(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+  FindNeighbors(reduction = "pca", dims = 1:30) %>%
+  FindClusters(resolution = 0.3)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+
+# Cluster visualization
+
+```{r Visualize the clusters, fig.width = 12, fig.height = 8}
+# Visualize the two conditions side-by-side, use the `split.by` argument to show each condition colored by cluster.
+# Visualize the distribution of celltypes across control and stimulated datasets:
+p02 <- DimPlot(immune.combined.sct, reduction = "umap", group.by = "treatment")
+p03 <- DimPlot(immune.combined.sct, reduction = "umap", label = TRUE, repel = TRUE) + NoLegend()
+p04 <- DimPlot(immune.combined.sct, reduction = "umap", split.by = "treatment")
+
+table(immune.combined.sct@active.ident)
+
+(p02 | p03)/
+    p04
+```
+
+
+# Marker genes for the clusters
+
+```{r Find the top 25 marker genes, fig.width = 10}
+# Prepare to find the markers
+immune.combined.sct <- PrepSCTFindMarkers(immune.combined.sct)
+
+# Compute differential expression
+marker_genes <- FindAllMarkers(immune.combined.sct, log2FC.threshold = 0.2, test.use = "wilcox", min.pct = 0.1, min.diff.pct = 0.2, only.pos = TRUE, max.cells.per.ident = 50, assay = "SCT", BPPARAM = MulticoreParam(4))
+
+# Get genes that are positivelly expressed in a cell type and possibly not expressed in the others
+# Select the top 25 upregulated genes
+marker_genes %>%
+    group_by(cluster) %>%
+    top_n(-25, p_val_adj) -> top25
+
+top25
+
+# Plot the top 25 upregulated genes
+library(rafalib)
+mypar(, 5, mar = c(3, 5, 3, 1))
+## Adjust the size of the margins using the notation par(mar = c(bottom, left, top, right)
+for (i in unique(top25$cluster)) {
+  barplots <- barplot(sort(setNames(top25$avg_log2FC, top25$gene)[top25$cluster == i], F),
+          horiz = T, las = 1, main = paste0(i, " vs. rest"), border = "white", yaxs = "i")
+  abline(v = c(0, 0.25), lty = c(1, 2)) 
+}
+```
+
+```{r Heatmap the top 5 marker genes, fig.width = 18, fig.height = 25}
+# Select the top 5 to visualize as plots
+marker_genes %>%
+    group_by(cluster) %>%
+    top_n(-5, p_val_adj) -> top5
+
+# Create a scale.data slot for the selected genes to do heatmap
+immune.combined.sct <- ScaleData(immune.combined.sct, features = as.character(unique(top5$gene)), assay = "SCT", BPPARAM = MulticoreParam(4))
+
+# Plot Heatmap
+library(pheatmap)
+heatmap <- DoHeatmap(immune.combined.sct, features = as.character(unique(top5$gene)), group.by = "seurat_clusters", assay = "SCT", size = 3, angle = 0, hjust = 0.5, group.bar.height = 0.02) + NoLegend()
+
+heatmap
+```
+
+```{r DotPlot the top 5 marker genes, fig.height = 20, fig.width = 6}
+# Plot DotPlot
+dotplot <- DotPlot(immune.combined.sct, features = rev(as.character(unique(top5$gene))), group.by = "seurat_clusters", assay = "SCT") + coord_flip() + NoLegend() & theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+dotplot
+```
+
+```{r Vlnplot the top 5 marker genes, fig.width = 22 , fig.height = 34}
+# Plot VinPlot
+vlnplot <- VlnPlot(immune.combined.sct, features = as.character(unique(top5$gene)), ncol = 5, group.by = "seurat_clusters", assay = "SCT", pt.size = 0) & theme(axis.title.y = element_blank(), axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5), title = element_text(size = 10))
+# Set pt.size to zero if do not want all the points to hide the violin shapes, or to a small value like 0.1
+
+vlnplot
+```
+
+```{r Save the data}
+# Export to csv
+write.csv(marker_genes, file = "Sensitivity_2_SCT_primary_clustering_marker_genes.csv")
+```
+
+
+# Log-normalization and scale data in RNA assay
+
+```{r Perform RNA log-normalization and scale}
+# Log-normalize and scale the RNA data
+immune.combined.sct <- immune.combined.sct %>%
+  NormalizeData(assay = "RNA") %>%
+  ScaleData(vars.to.regress = "percent.mt", assay = "RNA")
+
+# Set RNA assay as default
+DefaultAssay(immune.combined.sct) <- "RNA"
+```
+
+
+# CD45+ Thy1+ expression
+
+```{r Show lymphocyte genes, fig.width = 8}
+# Plot the lymphocyte genes
+plot_grid(ncol = 2,
+          FeaturePlot(immune.combined.sct, features = c("Ptprc")) + NoAxes() + NoLegend(),
+          VlnPlot(immune.combined.sct, features = c("Ptprc"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5)),
+          FeaturePlot(immune.combined.sct, features = c("Thy1")) + NoAxes() + NoLegend(),
+          VlnPlot(immune.combined.sct, features = c("Thy1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5))
+          )
+```
+
+
+# RDS file export
+
+```{r Save RDS}
+# Save the immune.combined.sct RDS file
+saveRDS(immune.combined.sct, file = "Sensitivity_2_SCT_log_final.rds")
+```
+
+
+<details>
+  <summary>**Session Info**</summary>
+```{r}
+sessionInfo()
+```
+

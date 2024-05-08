@@ -1,0 +1,303 @@
+---
+title: "Sensitivity 2 Structural Cell subsetting"
+output:
+   html_document: 
+     theme: united
+     df_print: kable
+     toc: yes
+date: 'Compiled: `r format(Sys.Date(), "%B %d, %Y")`'
+---
+
+```{r setup, include = FALSE}
+all_times <- list()  # store the time for each chunk
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- difftime(Sys.time(), now, units = "secs")
+      all_times[[options$label]] <<- res
+    }
+  }
+}))
+knitr::opts_chunk$set(
+  tidy = TRUE,
+  tidy.opts = list(width.cutoff = 95),
+  message = FALSE,
+  warning = FALSE,
+  time_it = TRUE
+)
+```
+
+
+# Universal packages
+
+```{r Load packages}
+library(Seurat)
+library(tidyverse)
+library(patchwork)
+library(cowplot)
+library(BiocParallel)
+```
+
+
+# Data input
+
+```{r Load SCT processed data}
+# Load Sen_2 data
+Sen_2  <- readRDS("Sensitivity_2_SCT_log_final.rds")
+
+head(x = Sen_2[[]])
+```
+
+
+# Cluster visualization
+
+```{r Visualize the clusters, fig.width = 16, fig.height = 15}
+# Show the numbers for the clusters
+table(Sen_2@active.ident, split.by = Sen_2@meta.data$treatment)
+
+# Set RNA assay as default
+DefaultAssay(Sen_2) <- "RNA"
+
+# Plot the clusters
+ckuster_layout <- plot_grid(ncol =2,
+                            DimPlot(Sen_2, label = T) + NoLegend(),
+                            DimPlot(Sen_2, group.by = "treatment", label = F) + ggtitle(NULL)
+                            )
+
+structural_gene <- plot_grid(ncol = 4,
+                      FeaturePlot(Sen_2, features = c("Ptprc")) + NoAxes() + NoLegend(),
+                      VlnPlot(Sen_2, features = c("Ptprc"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10,angle = 0, hjust = 0.5)),
+                      FeaturePlot(Sen_2, features = c("Mustn1")) + NoAxes() + NoLegend(),
+                      VlnPlot(Sen_2, features = c("Mustn1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5)),
+                      FeaturePlot(Sen_2, features = c("Icam1")) + NoAxes() + NoLegend(),
+                      VlnPlot(Sen_2, features = c("Icam1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5)),
+                      FeaturePlot(Sen_2, features = c("Vcam1")) + NoAxes() + NoLegend(),
+                      VlnPlot(Sen_2, features = c("Vcam1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5)),
+                      FeaturePlot(Sen_2, features = c("Epcam")) + NoAxes() + NoLegend(),
+                      VlnPlot(Sen_2, features = c("Epcam"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5)),
+                      FeaturePlot(Sen_2, features = c("Col6a2")) + NoAxes() + NoLegend(),
+                      VlnPlot(Sen_2, features = c("Col6a2"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5))
+                      )
+
+(ckuster_layout)/
+  structural_gene + 
+  plot_layout(heights = c(1, 2))
+```
+
+
+# structural subset
+
+```{r Sort out the structural lymphocytes}
+# Select structural cells (non-CD45, cluster 1, 3, 5, 10, 14, 15, 17, 18)
+structural <- subset(Sen_2, idents = c(1, 3, 5, 10, 14, 15, 17, 18))
+
+DimPlot(structural, label = T, reduction = "umap")
+
+# Split the dataset into a list of two seurat objects (BPC and CTRL)
+structural.list <- SplitObject(structural, split.by = "orig.ident")
+
+CTRL <- structural.list[["CTRL"]]
+BPC <- structural.list[["BPC"]]
+```
+
+
+# SCT normalization and reclustering on structural subset
+
+```{r Run CTRL PCA}
+# Normalize and run dimensionality reduction on CTRL dataset
+CTRL <- SCTransform(CTRL, vst.flavor = "v2", verbose = FALSE) %>%
+    RunPCA(npcs = 30, verbose = FALSE) %>%
+    RunUMAP(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+    FindNeighbors(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+    FindClusters(resolution = 0.5, verbose = FALSE)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+
+p01 <- DimPlot(CTRL, label = T, repel = T) + ggtitle("CTRL unsupervised clustering")
+
+p01
+```
+
+```{r Run BPC PCA}
+# Normalize and run dimensionality reduction on BPC dataset
+BPC <- SCTransform(BPC, vst.flavor = "v2", verbose = FALSE) %>%
+    RunPCA(npcs = 30, verbose = FALSE)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+```{r Prepare integration}
+# Perform integration using the pearson residuals calculated above. Use the `PrepSCTIntegration()` function after selecting a list of informative features using `SelectIntegrationFeatures()`:
+structural.list <- list(CTRL = CTRL, BPC = BPC)
+features <- SelectIntegrationFeatures(object.list = structural.list, nfeatures = 3000)
+structural.list <- PrepSCTIntegration(object.list = structural.list, anchor.features = features)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+```{r Perform SCT integration}
+# Integrate the two datasets, use the `FindIntegrationAnchors()` function, which takes a list of Seurat objects as input, and use these anchors to integrate the two datasets together with `IntegrateData()`.
+structural.anchors <- FindIntegrationAnchors(object.list = structural.list, normalization.method = "SCT", anchor.features = features)
+structural.sct <- IntegrateData(anchorset = structural.anchors, normalization.method = "SCT")
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+```{r Reclustering, results='hide', message=FALSE}
+structural.sct <- RunPCA(structural.sct, verbose = FALSE) %>%
+  RunUMAP(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+  FindNeighbors(reduction = "pca", dims = 1:30) %>%
+  FindClusters(resolution = 0.25)
+
+rm(large_df, large_list, large_vector, temp_variables)
+gc()
+```
+
+```{r Visualize the new clusters, fig.width = 9, fig.height = 4}
+# Show the numbers for the new clusters
+table(structural.sct@active.ident, split.by = structural.sct@meta.data$treatment)
+
+# Plot the new clusters
+Sub_layout1 <- plot_grid(ncol = 2,
+                         DimPlot(structural.sct, label = T),
+                         DimPlot(structural.sct, group.by = "treatment", label = F) + ggtitle(NULL)
+                         )
+
+Sub_layout1
+```
+
+
+# Marker genes for the new clusters
+
+```{r Find the top 25 marker genes, fig.width = 10}
+# Prepare to find the markers
+structural.sct <- PrepSCTFindMarkers(structural.sct)
+
+# Compute differential expression
+marker_genes <- FindAllMarkers(structural.sct, log2FC.threshold = 0.2, test.use = "wilcox", min.pct = 0.1, min.diff.pct = 0.2, only.pos = TRUE, max.cells.per.ident = 50, assay = "SCT", BPPARAM = MulticoreParam(4))
+
+# Get genes that are positivelly expressed in a cell type and possibly not expressed in the others
+# Select the top 25 upregulated genes
+marker_genes %>%
+    group_by(cluster) %>%
+    top_n(-25, p_val_adj) -> top25
+
+top25
+
+# Plot the top 25 upregulated genes
+library(rafalib)
+mypar(, 5, mar = c(3, 5, 3, 1))
+## Adjust the size of the margins using the notation par(mar = c(bottom, left, top, right)
+for (i in unique(top25$cluster)) {
+  barplots <- barplot(sort(setNames(top25$avg_log2FC, top25$gene)[top25$cluster == i], F),
+          horiz = T, las = 1, main = paste0(i, " vs. rest"), border = "white", yaxs = "i")
+  abline(v = c(0, 0.25), lty = c(1, 2)) 
+}
+```
+
+```{r Top 5 marker genes}
+# Select the top 5 to visualize as plots
+marker_genes %>%
+    group_by(cluster) %>%
+    top_n(-5, p_val_adj) -> top5
+
+# Create a scale.data slot for the selected genes to do heatmap
+structural.sct <- ScaleData(structural.sct, features = as.character(unique(top5$gene)), assay = "SCT", BPPARAM = MulticoreParam(4))
+```
+
+```{r Heatmap the top 5 marker genes, fig.width = 12, fig.height = 8}
+# Plot Heatmap
+heatmap <- DoHeatmap(structural.sct, features = as.character(unique(top5$gene)), group.by = "seurat_clusters", assay = "SCT", angle = 0, hjust = 0.5, group.bar.height = 0.02) + NoLegend()
+
+heatmap
+```
+
+```{r DotPlot the top 5 marker genes, fig.height = 9, fig.width = 3}
+# Plot DotPlot
+dotplot <- DotPlot(structural.sct, features = rev(as.character(unique(top5$gene))), group.by = "seurat_clusters", assay = "SCT") + coord_flip() + NoLegend() & theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+dotplot
+```
+
+```{r VinPlot the top 5 marker genes, fig.width = 16, fig.height = 14}
+# Plot VinPlot
+vlnplot <- VlnPlot(structural.sct, features = as.character(unique(top5$gene)), ncol = 5, group.by = "seurat_clusters", assay = "SCT", pt.size = 0) & theme(axis.title.y = element_blank(), axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5), title = element_text(size = 10))
+# Set pt.size to zero if do not want all the points to hide the violin shapes, or to a small value like 0.1
+
+vlnplot
+```
+
+```{r Save the results}
+# Export to csv
+write.csv(marker_genes, file = "Sensitivity_2_SCT_Ptprc_neg_Sub_marker_genes.csv")
+```
+
+
+# Log-normalization and scale data in RNA assay
+
+```{r Perform RNA log-normalization and scale}
+# Log-normalize and scale the RNA data
+structural.sct <- structural.sct %>%
+  NormalizeData(assay = "RNA") %>%
+  ScaleData(vars.to.regress = "percent.mt", assay = "RNA")
+
+# Set RNA assay as default
+DefaultAssay(structural.sct) <- "RNA"
+```
+
+
+# Feature gene plots
+
+```{r Plot the feature genes, fig.width = 16, fig.height = 20}
+# Marker gene referance
+# https://panglaodb.se/markers.html?cell_type=%27Ciliated%20cells%27
+
+# Plot the feature genes
+Sub_layout2 <- plot_grid(ncol = 4,
+                         FeaturePlot(structural.sct, features = c("Vim")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Vim"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Col6a2")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Col6a2"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Cdh11")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Cdh11"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Acta2")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Acta2"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Epcam")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Epcam"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Muc5b")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Muc5b"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Clic5")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Clic5"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Sftpc")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Sftpc"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Aldh1a1")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Aldh1a1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5)),
+                         FeaturePlot(structural.sct, features = c("Foxj1")) + NoAxes() + NoLegend(),
+                         VlnPlot(structural.sct, features = c("Foxj1"), pt.size = 0.1) + NoLegend() + theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 0.5))
+                         )
+
+(Sub_layout1)/
+  (Sub_layout2) + plot_layout(heights = c(1, 3))
+```
+
+
+# Data save
+
+```{r Save RDS}
+saveRDS(structural.sct, file = "Sensitivity_2_SCT_Ptprc_neg_Sub_log_final.rds")
+```
+
+
+<details>
+  <summary>**Session Info**</summary>
+```{r}
+sessionInfo()
+```
+
