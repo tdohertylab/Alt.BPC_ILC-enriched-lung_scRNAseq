@@ -64,7 +64,7 @@ table(Thy1@meta.data$cell_type, split.by = Thy1@meta.data$treatment)
 
 # Plot the CD45+ Thy1+ clusters
 DimPlot(Thy1, group.by = "cell_type", label = T, repel =  T)
-DimPlot(Thy1, group.by = "treatment", label = F) + ggtitle(NULL)
+DimPlot(Thy1, group.by = "cell_type", split.by = "treatment", label = F) + ggtitle(NULL)
 ```
 
 
@@ -72,7 +72,7 @@ DimPlot(Thy1, group.by = "treatment", label = F) + ggtitle(NULL)
 
 ```{r Define cell subsets}
 # Label the overall annotation
-overall.ids.CNA <- c("ILC2", "ILC2", "ILC2", "ILC2", "ILC2", "ILC2", "T", "NK", "ILC1", "T", "HSC", "NK", "T")
+overall.ids.CNA <- c("ILC2", "ILC2", "ILC2", "ILC2", "ILC2", "ILC2", "T", "NKL", "ILC1L", "T", "HSC", "NKL", "T")
 names(overall.ids.CNA) <- levels(Thy1)
 Thy1 <- RenameIdents(Thy1, overall.ids.CNA)
 Thy1 <- AddMetaData(Thy1, metadata = Thy1@active.ident, col.name = 'cell_type_overall')
@@ -82,12 +82,7 @@ table(Thy1@active.ident, split.by = Thy1@meta.data$treatment)
 
 # Plot the CD45+Thy1+ clusters
 DimPlot(Thy1, group.by = "cell_type", label = T, repel =  T)
-DimPlot(Thy1, group.by = "treatment", label = F) + ggtitle(NULL)
-```
-
-```{r Set bqck primary ident}
-# Set the primary ident to "cell_type"
-Thy1 <- SetIdent(Thy1, value = "cell_type")
+DimPlot(Thy1, group.by = "cell_type", split.by = "treatment", label = F) + ggtitle(NULL)
 ```
 
 
@@ -158,7 +153,7 @@ ILC.BPC_CNA <- SetDatExpr(
   Thy1,
   group.by='cell_type_overall',
   # the metadata column containing the cell type info. This same column should have also been used in MetacellsByGroups
-  group_name = c("NK", "ILC1", "ILC2"),
+  group_name = c("NKL", "ILC1L", "ILC2"),
   # the name of the group of interest in the group.by column
   multi.group.by = 'treatment',
   #A string containing the name of a column in the Seurat object with groups for consensus WGCNA (dataset, sample, condition, etc)
@@ -332,6 +327,11 @@ ILC.BPC_CNA@meta.data <- cbind(ILC.BPC_CNA@meta.data, ILC.BPC_MEs)
 DotPlot(ILC.BPC_CNA, features = ILC.BPC_mods, group.by = 'cell_type', split.by = 'treatment', cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(size = 10))
 ```
 
+```{r Set bqck primary ident}
+# Set the primary ident to "cell_type"
+ILC.BPC_CNA <- SetIdent(ILC.BPC_CNA, value = "cell_type")
+```
+
 ```{r ILC_BPC marker gene OverlapDotPlot, fig.width = 5, fig.height = 3}
 # Compute marker genes in ILC with Seurat
 ILC.BPC_CNA_ILC <- ILC.BPC_CNA %>%
@@ -362,10 +362,10 @@ ILC_OverlapDotPlot <- OverlapDotPlot(
 ILC_OverlapDotPlot
 ```
 
-```{r ILC_BPC marker gene in ILC1 and NK OverlapDotPlot, fig.width = 5, fig.height = 2}
-# Compute marker genes in ILC1 and NK with Seurat
+```{r ILC_BPC marker gene in NK/ILC1 OverlapDotPlot, fig.width = 5, fig.height = 2}
+# Compute marker genes in NK/ILC1 with Seurat
 ILC.BPC_CNA_ILC_NK <- ILC.BPC_CNA %>%
-  subset(idents = c("NK", "ILC1", "ST2 NK"), invert = FALSE) %>%
+  subset(idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), invert = FALSE) %>%
   SetIdent(value = "treatment")
 
 table(ILC.BPC_CNA_ILC_NK@meta.data$cell_type_overall, split.by = ILC.BPC_CNA_ILC_NK@meta.data$treatment)
@@ -376,31 +376,31 @@ ILC.BPC_ILC1_NK_markers <- Seurat::FindAllMarkers(
   logfc.threshold=0.5
 )
 
-# Compute marker gene overlaps in ILC1 and NK
+# Compute marker gene overlaps in NK/ILC1
 ILC.BPC_ILC1_NK_overlap <- OverlapModulesDEGs(
   ILC.BPC_CNA_ILC_NK,
   deg_df = ILC.BPC_ILC1_NK_markers,
   fc_cutoff = 0.5 # log fold change cutoff for overlap analysis
 )
 
-# Plot odds ratio of the overlap as a dot plot for ILC1 and NK
+# Plot odds ratio of the overlap as a dot plot for NK/ILC1
 ILC1_NK_OverlapDotPlot <- OverlapDotPlot(
   ILC.BPC_ILC1_NK_overlap,
   plot_var = 'odds_ratio') +
-  ggtitle('Overlap of modules in ILC1 and NK') + 
+  ggtitle('Overlap of modules in NK/ILC1') + 
   theme(axis.text.x = element_text(size = 10, angle = 0, vjust = 0.5, hjust = 0.5))
 
 ILC1_NK_OverlapDotPlot
 ```
 
-```{r ILC_BPC marker gene in ILC1 and NK OverlapBarPlot, fig.width = 3, fig.height = 3}
+```{r ILC_BPC marker gene in NK/ILC1 OverlapBarPlot, fig.width = 3, fig.height = 3}
 # Overlap barplot for Alt, produces a plot for each cell type
 plot_list_ILC1_NK <- OverlapBarPlot(ILC.BPC_ILC1_NK_overlap)
 
 # Stitch plots with patchwork
 ILC1_NK_OverlapBarPlot <- wrap_plots(plot_list_ILC1_NK)
 
-ILC1_NK_OverlapBarPlot.title <- plot_grid(NULL, ILC1_NK_OverlapBarPlot, labels = c('ILC1 and NK'), label_size = 12, ncol = 1, rel_heights = c(0.07, 1))
+ILC1_NK_OverlapBarPlot.title <- plot_grid(NULL, ILC1_NK_OverlapBarPlot, labels = c('NK/ILC1'), label_size = 12, ncol = 1, rel_heights = c(0.07, 1))
 
 ILC1_NK_OverlapBarPlot.title
 ```
@@ -489,54 +489,54 @@ Module_M8 <- list(" " = ILC_BPC_M8)
 
 ```{r ILC_BPC module expression in NK_ILC1, fig.width = 5, fig.height = 3}
 # Plot with Seurat's DotPlot function
-NK_ILC1_module <- DotPlot(ILC.BPC_CNA, features = ILC.BPC_mods, idents = c("NK", "ILC1", "ST2 NK"), group.by = 'cell_type', split.by = 'treatment', cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(size = 10, color = c("dimgray", "black"))) + ggtitle("Module expression")
+NK_ILC1_module <- DotPlot(ILC.BPC_CNA, features = ILC.BPC_mods, idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = 'cell_type', split.by = 'treatment', cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(size = 10, color = c("dimgray", "black"))) + ggtitle("Module expression")
 
 NK_ILC1_module
 ```
 
 ```{r NK_ILC1 module expression, fig.width = 6, fig.height = 4}
 # Dotplot
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M1), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M1: TYROBP causal network")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M1), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M1: TYROBP causal network")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M2), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M2: DNA replication")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M2), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M2: DNA replication")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M3), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M3: MAPK signaling pathway")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M3), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M3: MAPK signaling pathway")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M4), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M4: Type II interferon signaling (IFNG)")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M4), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M4: Type II interferon signaling (IFNG)")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M5), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M5: Cytoplasmic ribosomal proteins")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M5), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M5: Cytoplasmic ribosomal proteins")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M6), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M6: p53 signaling")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M6), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M6: p53 signaling")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M7), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M7: Neuclear receptors (Rora-related)")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M7), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M7: Neuclear receptors (Rora-related)")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M8), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M8: Electron transport chain")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M8), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M8: Electron transport chain")
 
-DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M9), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M9: Cytoplasmic ribosomal proteins")
+DotPlot(ILC.BPC_CNA, features = rev(ILC_BPC_M9), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + ggtitle("M9: Cytoplasmic ribosomal proteins")
 ```
 
 ```{r ILC.BPC_CNA module expression for paper, fig.width = 11, fig.height = 4}
-NK_ILC1_M1_M3_M7 <- DotPlot(ILC.BPC_CNA, features = Module_M1_M3_M7, idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M1: TYROBP causal network/M3: MAPK signaling pathway/M7: Neuclear receptors (Rora-related)")
+NK_ILC1_M1_M3_M7 <- DotPlot(ILC.BPC_CNA, features = Module_M1_M3_M7, idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M1: TYROBP causal network/M3: MAPK signaling pathway/M7: Neuclear receptors (Rora-related)")
 
 NK_ILC1_M1_M3_M7
 
 
-NK_ILC1_M2_M6 <- DotPlot(ILC.BPC_CNA, features = Module_M2_M6, idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M2: DNA replication/M6: p53 signaling")
+NK_ILC1_M2_M6 <- DotPlot(ILC.BPC_CNA, features = Module_M2_M6, idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M2: DNA replication/M6: p53 signaling")
 
 NK_ILC1_M2_M6
 
 
-NK_ILC1_M8 <- DotPlot(ILC.BPC_CNA, features = Module_M8, idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M8: Electron transport chain")
+NK_ILC1_M8 <- DotPlot(ILC.BPC_CNA, features = Module_M8, idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M8: Electron transport chain")
 
 NK_ILC1_M8
 
 
-NK_ILC1_M5_M9 <- DotPlot(ILC.BPC_CNA, features = Module_M5_M9, idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M5/M9: Cytoplasmic ribosomal proteins")
+NK_ILC1_M5_M9 <- DotPlot(ILC.BPC_CNA, features = Module_M5_M9, idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M5/M9: Cytoplasmic ribosomal proteins")
 
 NK_ILC1_M5_M9
 
 
-NK_ILC1_M4 <- DotPlot(ILC.BPC_CNA, features = Module_M4, idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M4: Type II interferon signaling (IFNG)")
+NK_ILC1_M4 <- DotPlot(ILC.BPC_CNA, features = Module_M4, idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("M4: Type II interferon signaling (IFNG)")
 
 NK_ILC1_M4
 ```
@@ -613,13 +613,13 @@ AntiOx <- c("Gpx1", "Gpx4", "ndufa13", "Prdx1", "Prdx2", "Prdx3", "Prdx4", "Prdx
 # Oxidative stress gene expression in NK and ILC1
 
 ```{r NK_ILC1 Stressidant genes, fig.width = 6, fig.height = 3}
-NK_ILC1_Stress <- DotPlot(ILC.BPC_CNA, features = c(Stress), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("Stress-related genes")
+NK_ILC1_Stress <- DotPlot(ILC.BPC_CNA, features = c(Stress), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("Stress-related genes")
 
 NK_ILC1_Stress
 ```
 
 ```{r NK_ILC1 Antioxidant genes, fig.width = 5, fig.height = 3}
-NK_ILC1_AntiOx <- DotPlot(ILC.BPC_CNA, features = c(AntiOx), idents = c("NK", "ILC1", "ST2 NK"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("Antioxidant genes")
+NK_ILC1_AntiOx <- DotPlot(ILC.BPC_CNA, features = c(AntiOx), idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), group.by = "cell_type", split.by = "treatment", assay = "RNA", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black"))) + ggtitle("Antioxidant genes")
 
 NK_ILC1_AntiOx
 ```
@@ -646,7 +646,7 @@ ILC2_AntiOx
 # Generate the plot in paper figure form
 figure4_1 <- plot_grid(NULL, ILC.PlotKMEs, labels = c('(A)'), label_size = 18, nrow = 1, ncol = 2, rel_widths = c(0.2, 2))
 figure4_2 <- plot_grid(ILC.EnrichrDotPlot, labels = c('(B)'), label_size = 18, ncol = 1)
-figure4_3 <- plot_grid(NULL, NULL, NULL, NULL, labels = c('(C)', 'ILC1 and NK', '(D)', 'ILC2'), label_size = 18, nrow = 1, rel_widths = c(0.55, 1.45, 0.87, 1.13))
+figure4_3 <- plot_grid(NULL, NULL, NULL, NULL, labels = c('(C)', 'NK/ILC1', '(D)', 'ILC2'), label_size = 18, nrow = 1, rel_widths = c(0.72, 1.27, 0.87, 1.13))
 figure4_4 <- plot_grid(ILC1_NK_OverlapBarPlot, ILC2_OverlapBarPlot)
 
 figure4 <- plot_grid(figure4_1, figure4_2, figure4_3, figure4_4,
@@ -674,32 +674,32 @@ figure5
 
 ```{r NK_ILC1 figure for paper, fig.width = 14, fig.height = 12}
 # Generate the plot in paper figure form
-figureS2_1 <- plot_grid(NULL, NK_ILC1_M1_M3_M7, labels = c('(A)'), label_size = 18, nrow = 1, rel_widths = c(0.01, 2.3))
-figureS2_2 <- plot_grid(NK_ILC1_M2_M6, NK_ILC1_M8, labels = c('(B)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1.4, 1))
-figureS2_3 <- plot_grid(NK_ILC1_M4, NK_ILC1_M5_M9, labels = c('(D)', '(E)'), label_size = 18, nrow = 1, rel_widths = c(1, 1.5))
+figureS3_1 <- plot_grid(NULL, NK_ILC1_M1_M3_M7, labels = c('(A)'), label_size = 18, nrow = 1, rel_widths = c(0.01, 2.3))
+figureS3_2 <- plot_grid(NK_ILC1_M2_M6, NK_ILC1_M8, labels = c('(B)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1.4, 1))
+figureS3_3 <- plot_grid(NK_ILC1_M4, NULL, NK_ILC1_M5_M9, labels = c('(D)', ' ', '(E)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 1.5))
 
-figureS2 <- plot_grid(figureS2_1, figureS2_2, figureS2_3,
+figureS3 <- plot_grid(figureS3_1, figureS3_2, figureS3_3,
   nrow = 3,
   ncol = 1,
   rel_heights = c(1, 1.1, 1)
   )
 
-figureS2
+figureS3
 ```
 
 ```{r ILC2 figure for paper, fig.width = 14, fig.height = 14}
 # Generate the plot in paper figure form
-figureS3_1 <- plot_grid(NULL, ILC2_M1_M3_M7, labels = c('(A)'), label_size = 18, nrow = 1, rel_widths = c(0.01, 2.3))
-figureS3_2 <- plot_grid(ILC2_M2_M6, ILC2_M8, labels = c('(B)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1.3, 1))
-figureS3_3 <- plot_grid(ILC2_M4, ILC2_M5_M9, labels = c('(D)', '(E)'), label_size = 18, nrow = 1, rel_widths = c(1, 1.3))
+figureS4_1 <- plot_grid(NULL, ILC2_M1_M3_M7, labels = c('(A)'), label_size = 18, nrow = 1, rel_widths = c(0.01, 2.3))
+figureS4_2 <- plot_grid(ILC2_M2_M6, ILC2_M8, labels = c('(B)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1.3, 1))
+figureS4_3 <- plot_grid(ILC2_M4, NULL, ILC2_M5_M9, labels = c('(D)', ' ', '(E)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 1.5))
 
-figureS3 <- plot_grid(figureS3_1, figureS3_2, figureS3_3,
+figureS4 <- plot_grid(figureS4_1, figureS4_2, figureS4_3,
   nrow = 3,
   ncol = 1,
   rel_heights = c(1, 1.1, 1.1)
   )
 
-figureS3
+figureS4
 ```
 
 
@@ -712,8 +712,8 @@ dir.create("./Figures", showWarnings = FALSE)
 # Save the figure
 ggsave2(plot = figure4, path = "./Figures", "Figure4.tiff", device = "tiff", dpi = 300, bg = "white", width = 12, height = 15, units = "in")
 ggsave2(plot = figure5, path = "./Figures", "Figure5.tiff", device = "tiff", dpi = 300, bg = "white", width = 16, height = 9, units = "in")
-ggsave2(plot = figureS2, path = "./Figures", "FigureS2.tiff", device = "tiff", dpi = 300, bg = "white", width = 14, height = 12, units = "in")
-ggsave2(plot = figureS3, path = "./Figures", "FigureS3.tiff", device = "tiff", dpi = 300, bg = "white", width = 14, height = 14, units = "in")
+ggsave2(plot = figureS3, path = "./Figures", "figureS3.tiff", device = "tiff", dpi = 300, bg = "white", width = 14, height = 12, units = "in")
+ggsave2(plot = figureS4, path = "./Figures", "figureS4.tiff", device = "tiff", dpi = 300, bg = "white", width = 14, height = 14, units = "in")
 ```
 
 ```{r Output the CSV files}

@@ -64,24 +64,24 @@ table(ILC@meta.data$cell_type, split.by = ILC@meta.data$treatment)
 
 # Plot the ILC clusters
 DimPlot(ILC, group.by = "cell_type", label = T, repel =  T)
-DimPlot(ILC, group.by = "treatment", label = F) + ggtitle(NULL)
+DimPlot(ILC, group.by = "cell_type", split.by = "treatment", label = F) + ggtitle(NULL)
 ```
 
 
 # ILC subsets
 
 ```{r ILC subsets}
-# ILC1 and NK
-ILC1_NK <- ILC %>%
-    subset(idents = c("ILC1", "NK", "ST2 NK"), invert = FALSE) %>%
+# NK/ILC1
+NK_ILC1 <- ILC %>%
+    subset(idents = c("NCR1 NK/ILC1", "IFNg NK/ILC1", "ST2 NK/ILC1"), invert = FALSE) %>%
     SetIdent(value = "treatment")
 
-table(ILC1_NK@meta.data$cell_type, split.by = ILC1_NK@meta.data$treatment)
+table(NK_ILC1@meta.data$cell_type, split.by = NK_ILC1@meta.data$treatment)
 
 # ILC2
 ILC2 <- ILC %>%
-    subset(idents = c("Areg ILC2", "IL-13 ILC2", "IL-10 ILC2", "Quiescent ILC2", "KLRG1 ILC2", "LTB ILC2"),
-        invert = FALSE)
+    subset(idents = c("Areg ILC2", "IL-13 ILC2", "IL-10 ILC2", "Quiescent ILC2", "KLRG1 ILC2", "LTB ILC2"), invert = FALSE) %>%
+    SetIdent(value = "treatment")
 
 table(ILC2@meta.data$cell_type, split.by = ILC2@meta.data$treatment)
 ```
@@ -112,44 +112,44 @@ library(EnhancedVolcano)
 ```
 
 
-# NK and ILC1 gene set enrichment analysis
+# NK/ILC1 gene set enrichment analysis
 
-```{r ILC1_NK differential expression}
-ILC1_NK <- SetIdent(ILC1_NK, value = "treatment")
+```{r NK_ILC1 differential expression}
+NK_ILC1 <- SetIdent(NK_ILC1, value = "treatment")
 
-# Find the differential expressed genes in ILC1_NK
-ILC1_NK_differential <- FindMarkers(ILC1_NK, ident.1 = "Alt.BPC", ident.2 = "Alt", min.cells.group = 10, test.use = "wilcox_limma", only.pos = FALSE, assay = "RNA", slot = "scale.data")
+# Find the differential expressed genes in NK_ILC1
+NK_ILC1_differential <- FindMarkers(NK_ILC1, ident.1 = "Alt.BPC", ident.2 = "Alt", min.cells.group = 10, test.use = "wilcox_limma", only.pos = FALSE, assay = "RNA", slot = "scale.data")
 
-ILC1_NK_differential <- ILC1_NK_differential[order(abs(ILC1_NK_differential$avg_log2FC), decreasing = T), ]
+NK_ILC1_differential <- NK_ILC1_differential[order(abs(NK_ILC1_differential$avg_log2FC), decreasing = T), ]
 
-head(ILC1_NK_differential)
+head(NK_ILC1_differential)
 
-# Find the top 5 (positive and negative) differential expression in ILC2
-ILC1_NK_differential %>%
+# Find the top 5 (positive and negative) differential expression in NK_ILC1
+NK_ILC1_differential %>%
   filter(abs(avg_log2FC) > 0.5) %>%
   filter(avg_log2FC > 0) %>%
   top_n(-5, p_val) %>%
-  arrange(p_val) -> ILC1_NK_differential_top5pos
+  arrange(p_val) -> NK_ILC1_differential_top5pos
 
-head(ILC1_NK_differential_top5pos)
+head(NK_ILC1_differential_top5pos)
 
-ILC1_NK_differential %>%
+NK_ILC1_differential %>%
   filter(abs(avg_log2FC) > 0.5) %>%
   filter(avg_log2FC < 0) %>%
   top_n(-5, p_val) %>%
-  arrange(p_val) -> ILC1_NK_differential_top5neg
+  arrange(p_val) -> NK_ILC1_differential_top5neg
 
-head(ILC1_NK_differential_top5neg)
+head(NK_ILC1_differential_top5neg)
 ```
 
-```{r ILC1_NK DE Volcano plot, fig.width = 6, fig.height = 6}
+```{r NK_ILC1 DE Volcano plot, fig.width = 6, fig.height = 6}
 # Plot the top 10 differential genes with volcano plot
-ILC1_NK_volcano <- EnhancedVolcano(ILC1_NK_differential,
-    lab = rownames(ILC1_NK_differential),
-    selectLab = c(rownames(ILC1_NK_differential_top5pos), rownames(ILC1_NK_differential_top5neg)),
+NK_ILC1_volcano <- EnhancedVolcano(NK_ILC1_differential,
+    lab = rownames(NK_ILC1_differential),
+    selectLab = c(rownames(NK_ILC1_differential_top5pos), rownames(NK_ILC1_differential_top5neg)),
     x = 'avg_log2FC',
     y = 'p_val',
-    title = 'ILC1 and NK Alt.BPC vs. Alt',
+    title = 'NK/ILC1 Alt.BPC vs. Alt',
     pCutoff = 10e-7,
     FCcutoff = 0.5,
     pointSize = 3.0,
@@ -159,40 +159,40 @@ ILC1_NK_volcano <- EnhancedVolcano(ILC1_NK_differential,
     colConnectors = 'black') +
   labs(subtitle = NULL)
 
-ILC1_NK_volcano
+NK_ILC1_volcano
 ```
 
-```{r ILC1_NK GSEA map, fig.height = 16, fig.width = 16}
-# Find the top 50% significant differential expression in ILC1_NK
-ILC1_NK_differential %>%
-  filter(abs(ILC1_NK_differential$avg_log2FC) > 0.5 & p_val < 0.05) %>%
-  arrange(p_val) -> ILC1_NK_differential_overTHR
+```{r NK_ILC1 GSEA map, fig.height = 16, fig.width = 16}
+# Find the top 50% significant differential expression in NK_ILC1
+NK_ILC1_differential %>%
+  filter(abs(NK_ILC1_differential$avg_log2FC) > 0.5 & p_val < 0.05) %>%
+  arrange(p_val) -> NK_ILC1_differential_overTHR
 
-ILC1_NK_differential_overTHR %>%
-  top_frac(-0.5, ILC1_NK_differential_overTHR$p_val) -> ILC1_NK_differential_Q2
+NK_ILC1_differential_overTHR %>%
+  top_frac(-0.5, NK_ILC1_differential_overTHR$p_val) -> NK_ILC1_differential_Q2
 
-head(ILC1_NK_differential_Q2)
-tail(ILC1_NK_differential_Q2)
+head(NK_ILC1_differential_Q2)
+tail(NK_ILC1_differential_Q2)
 
 # Convert gene label from SYMBOL to ENTREZID
-ILC1_NK_gene_id <- bitr(rownames(ILC1_NK_differential_Q2), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db", drop = FALSE)
+NK_ILC1_gene_id <- bitr(rownames(NK_ILC1_differential_Q2), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db", drop = FALSE)
 
-head(ILC1_NK_gene_id)
-tail(ILC1_NK_gene_id)
+head(NK_ILC1_gene_id)
+tail(NK_ILC1_gene_id)
 
 # Create a gene rank based on the gene expression fold change
-ILC1_NK_gene_list <- setNames(ILC1_NK_differential_Q2$avg_log2FC, ILC1_NK_gene_id$ENTREZID)
+NK_ILC1_gene_list <- setNames(NK_ILC1_differential_Q2$avg_log2FC, NK_ILC1_gene_id$ENTREZID)
 
-head(ILC1_NK_gene_list)
-tail(ILC1_NK_gene_list)
+head(NK_ILC1_gene_list)
+tail(NK_ILC1_gene_list)
 
 # Sort the list in decreasing order (required for clusterProfiler)
-ILC1_NK_gene_rank = sort(ILC1_NK_gene_list, decreasing = TRUE)
+NK_ILC1_gene_rank = sort(NK_ILC1_gene_list, decreasing = TRUE)
 
-head(ILC1_NK_gene_rank)
+head(NK_ILC1_gene_rank)
 
 # Perform GSE analysis
-ILC1_NK_gse <- gseGO(geneList      = ILC1_NK_gene_rank,
+NK_ILC1_gse <- gseGO(geneList      = NK_ILC1_gene_rank,
                        ont           = "ALL", 
                        keyType       = "ENTREZID", 
                        nPerm         = 10000, 
@@ -210,25 +210,25 @@ ILC1_NK_gse <- gseGO(geneList      = ILC1_NK_gene_rank,
 
 
 # Select out the top 20 terms based on |enrichmentScore|
-ILC1_NK_gse %>%
+NK_ILC1_gse %>%
   filter(abs(enrichmentScore) > 0.5) %>%
   filter(ONTOLOGY == "CC" | ONTOLOGY == "MF") %>%
   top_n(-20, pvalue) %>%
-  arrange(desc(leading_edge)) -> ILC1_NK_gse_top20
+  arrange(desc(leading_edge)) -> NK_ILC1_gse_top20
 
 
 # Convert gene ID to Symbol
-ILC1_NK_gse <- setReadable(ILC1_NK_gse, 'org.Mm.eg.db', 'ENTREZID')
+NK_ILC1_gse <- setReadable(NK_ILC1_gse, 'org.Mm.eg.db', 'ENTREZID')
 
-ILC1_NK_gse_top20 <- setReadable(ILC1_NK_gse_top20, 'org.Mm.eg.db', 'ENTREZID')
-head(ILC1_NK_gse_top20, 20)
+NK_ILC1_gse_top20 <- setReadable(NK_ILC1_gse_top20, 'org.Mm.eg.db', 'ENTREZID')
+head(NK_ILC1_gse_top20, 20)
 
 # CategorySize can be either 'pvalue' or 'geneNum'
-ILC1_NK_gse_map <- cnetplot(ILC1_NK_gse_top20, categorySize="pvalue", foldChange=ILC1_NK_gene_rank, colorEdge = TRUE, showCategory = 10) +
-  labs(title = "ILC1 and NK enrichment map") +
+NK_ILC1_gse_map <- cnetplot(NK_ILC1_gse_top20, categorySize="pvalue", foldChange=NK_ILC1_gene_rank, colorEdge = TRUE, showCategory = 10) +
+  labs(title = "NK/ILC1 enrichment map") +
   theme(plot.title = element_text(size=16, face="bold"))
 
-ILC1_NK_gse_map
+NK_ILC1_gse_map
 ```
 
 
@@ -356,7 +356,7 @@ ILC2_gse_map
 
 ```{r GSE map for paper, fig.width = 20, fig.height = 20}
 # Generate the plot in paper figure form
-figure6_1 <- plot_grid(ILC1_NK_volcano, NULL, ILC1_NK_gse_map, labels = c('(A)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 2))
+figure6_1 <- plot_grid(NK_ILC1_volcano, NULL, NK_ILC1_gse_map, labels = c('(A)', '(C)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 2))
 figure6_2 <- plot_grid(ILC2_volcano, NULL, ILC2_gse_map, labels = c('(B)', '(D)'), label_size = 18, nrow = 1, rel_widths = c(1, 0.1, 2))
 
 figure6 <- plot_grid(figure6_1, figure6_2,
@@ -384,8 +384,8 @@ ggsave2(plot = figure6, path = "./Figures", "Figure6.tiff", device = "tiff", dpi
 dir.create("./CSV", showWarnings = FALSE)
 
 # Export to csv
-write.csv(ILC1_NK_differential, file.path("./CSV", "ILC1_NK_differential.csv"))
-write.csv(ILC1_NK_gse, file.path("./CSV", "ILC1_NK_gse.csv"))
+write.csv(NK_ILC1_differential, file.path("./CSV", "NK_ILC1_differential.csv"))
+write.csv(NK_ILC1_gse, file.path("./CSV", "NK_ILC1_gse.csv"))
 
 write.csv(ILC2_differential, file.path("./CSV", "ILC2_differential.csv"))
 write.csv(ILC2_gse, file.path("./CSV", "ILC2_gse.csv"))

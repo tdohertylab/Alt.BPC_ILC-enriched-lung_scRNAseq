@@ -307,11 +307,11 @@ ILC@assays$tfswmean@data <- ILC@assays$tfswmean@scale.data
 ```
 
 
-# Exploration of the overall TF activities
+# Exploration of TF activities
 
 ```{r ILC Ahr activity and epxression , fig.width = 20, fig.height = 4}
-ILC_Ahr_p1 <- DimPlot(ILC, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, pt.size = 0.5) + 
-  NoLegend() + ggtitle('Cell types')
+ILC_Ahr_p1 <- DimPlot(ILC, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, label.size = 3.5, pt.size = 0.5) + 
+  NoLegend() + ggtitle('NK/ILC')
 
 ILC_Ahr_p2 <- (FeaturePlot(ILC, features = c("Ahr"), split.by = "treatment") & 
   scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
@@ -326,155 +326,61 @@ DefaultAssay(object = ILC) <- "tfswmean"
 
 plot_grid(NULL, NULL, NULL, ILC_Ahr_p1, ILC_Ahr_p2, ILC_Ahr_p3, nrow = 2, ncol = 3, rel_heights = c(0.1, 1), rel_widths = c(1, 2, 2), labels = c('Cluster layout', 'AhR activity', 'Ahr expression'), label_size =16)
 
-ILC_Ahr <- plot_grid(NULL, ILC_Ahr_p2, nrow = 2, rel_heights = c(0.1, 1), labels = "AhR activity in ILC", label_size =16)
+ILC_Ahr <- plot_grid(NULL, NULL, ILC_Ahr_p1, ILC_Ahr_p2, nrow = 2, ncol = 2, rel_heights = c(0.1, 1), rel_widths = c(1, 2))
 
 ILC_Ahr
 ```
 
+```{r ILC Ahr response gene expression , fig.width = 4.5, fig.height = 5}
+# AhR genes in ILCs
+ILC_Ahr_gene <- DotPlot(ILC, features = c("Cyp1a1", "Cyp1b1", "Nfe2l2", "Klf4"), assay ="RNA", group.by = "cell_type", split.by = "treatment", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black")))
 
-# Split of the data by treatment
-
-```{r Split the data}
-ILC <- SetIdent(ILC, value = "treatment")
-
-# BPC
-BPC <- ILC %>% 
-  subset(idents = c("Alt.BPC"), invert = FALSE) %>%
-  SetIdent(value = "cell_type")
-
-table(BPC@meta.data$cell_type, split.by = BPC@meta.data$treatment)
-
-
-# Alt
-Alt <- ILC %>% 
-  subset(idents = c("Alt"), invert = FALSE) %>%
-  SetIdent(value = "cell_type")
-
-table(Alt@meta.data$cell_type, split.by = Alt@meta.data$treatment)
+ILC_Ahr_gene + ggtitle("AhR response genes")
 ```
 
+```{r ILC Ahr TF activity, fig.width = 4, fig.height = 5}
+# AhR downstream TFs
+# https://link.springer.com/article/10.1007/s00204-019-02620-5
 
-# Exploration of the Alt TF activities
+# AhR activity in ILCs
+ILC_Ahr_TF <- DotPlot(ILC, features = c("Ahr", "Nfe2l2", "Klf4"), group.by = "cell_type", split.by = "treatment", cols = "RdBu") + theme(axis.title = element_blank(), legend.title = element_text(size = 8, face ="bold"), legend.text = element_text(size = 8), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), axis.text.y = element_text(color = c("dimgray", "black")))
 
-```{r TF analysis shared settings}
-# Select top variable TFs
-n_tfs <- 60
-
-# Choose color palette
-palette_length = 100
-my_color = colorRampPalette(c("Darkblue", "white","red"))(palette_length)
-
-my_breaks <- c(seq(-3, 0, length.out=ceiling(palette_length/2) + 1),
-               seq(0.05, 3, length.out=floor(palette_length/2)))
-```
-
-```{r Alt TF exploration, fig.width = 12, fig.height = 4}
-# Extract activities from object as a long dataframe
-Alt.df <- t(as.matrix(Alt@assays$tfswmean@data)) %>%
-  as.data.frame() %>%
-  mutate(cluster = Idents(Alt)) %>%
-  pivot_longer(cols = -cluster, names_to = "source", values_to = "score") %>%
-  group_by(cluster, source) %>%
-  summarise(mean = mean(score))
-
-# Get top tfs with more variable means across clusters
-Alt.tfs <- Alt.df %>%
-  group_by(source) %>%
-  summarise(std = sd(mean)) %>%
-  arrange(-abs(std)) %>%
-  head(n_tfs) %>%
-  pull(source)
-
-# Subset long data frame to top TFs and transform to wide matrix
-top_Alt.acts_mat <- Alt.df %>%
-  filter(source %in% Alt.tfs) %>%
-  pivot_wider(id_cols = 'cluster', names_from = 'source',
-              values_from = 'mean') %>%
-  column_to_rownames('cluster') %>%
-  as.matrix()
-
-
-# Plot
-pheatmap(top_Alt.acts_mat, border_color = NA, color=my_color, breaks = my_breaks) 
-```
-
-```{r Alt Ahr expression, fig.width = 13, fig.height = 4}
-Alt_Ahr_p1 <- DimPlot(Alt, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, pt.size = 0.5) + 
-  NoLegend() + ggtitle('Cell types')
-Alt_Ahr_p2 <- (FeaturePlot(Alt, features = c("Ahr")) & 
-  scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
-  ggtitle('AhR activity in Alt')
-DefaultAssay(object = Alt) <- "RNA"
-Alt_Ahr_p3 <- FeaturePlot(Alt, features = c("Ahr")) + ggtitle('Ahr expression in Alt')
-DefaultAssay(object = Alt) <- "tfswmean"
-
-plot_grid(Alt_Ahr_p1, Alt_Ahr_p2, Alt_Ahr_p3, nrow = 1, rel_widths = c(1, 1.3, 1.3))
-```
-
-
-# Exploration of the Alt.BPC TF activities
-
-```{r BPC TF exploration, fig.width = 12, fig.height = 4}
-# Extract activities from object as a long dataframe
-BPC.df <- t(as.matrix(BPC@assays$tfswmean@data)) %>%
-  as.data.frame() %>%
-  mutate(cluster = Idents(BPC)) %>%
-  pivot_longer(cols = -cluster, names_to = "source", values_to = "score") %>%
-  group_by(cluster, source) %>%
-  summarise(mean = mean(score))
-
-# Get top tfs with more variable means across clusters
-BPC.tfs <- BPC.df %>%
-  group_by(source) %>%
-  summarise(std = sd(mean)) %>%
-  arrange(-abs(std)) %>%
-  head(n_tfs) %>%
-  pull(source)
-
-# Subset long data frame to top TFs and transform to wide matrix
-top_BPC.acts_mat <- BPC.df %>%
-  filter(source %in% BPC.tfs) %>%
-  pivot_wider(id_cols = 'cluster', names_from = 'source',
-              values_from = 'mean') %>%
-  column_to_rownames('cluster') %>%
-  as.matrix()
-
-
-# Plot
-pheatmap(top_BPC.acts_mat, border_color = NA, color=my_color, breaks = my_breaks)
-```
-
-```{r BPC Ahr expression, fig.width = 13, fig.height = 4}
-BPC_Ahr_p1 <- DimPlot(BPC, reduction = "umap", group.by = "cell_type", label = TRUE, repel = TRUE, pt.size = 0.5) + 
-  NoLegend() + ggtitle('Cell types')
-BPC_Ahr_p2 <- (FeaturePlot(BPC, features = c("Ahr")) & 
-  scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
-  ggtitle('AhR activity in Alt.BPC')
-DefaultAssay(object = BPC) <- "RNA"
-BPC_Ahr_p3 <- FeaturePlot(BPC, features = c("Ahr")) + ggtitle('Ahr expression in Alt.BPC')
-DefaultAssay(object = BPC) <- "tfswmean"
-
-plot_grid(BPC_Ahr_p1, BPC_Ahr_p2, BPC_Ahr_p3, nrow = 1, rel_widths = c(1, 1.3, 1.3))
+ILC_Ahr_TF + ggtitle("Inferred AhR pathway activity")
 ```
 
 
 # Data oupput
 
-```{r HSP and AhR activity for paper, fig.width = 12, fig.height = 16}
+```{r HSP genes for paper, fig.width = 12, fig.height = 16}
 # Generate the plot in paper figure form
 figure7_1 <- plot_grid(Ptprc_volcano, NULL, HSP_Ptprc, labels = c('(A)', '(C)'), label_size = 18, nrow = 1, ncol = 3, rel_widths = c(1.25, 0.05, 1))
 figure7_2 <- plot_grid(Structural_volcano, HSP_Structural, labels = c('(B)', '(D)'), label_size = 18, nrow = 1, ncol = 2, rel_widths = c(1.2, 1))
-figure7_3 <- plot_grid(NULL, ILC_Ahr_p2, NULL, nrow = 3, ncol = 1, rel_heights = c(0.2, 2, 1))
-figure7_4 <- plot_grid(HSPR_ILC, figure7_3, labels = c('(E)', '(F)'), label_size = 18, nrow = 1, ncol = 2, rel_widths = c(0.8, 1))
+figure7_3 <- plot_grid(HSPR_ILC, labels = c('(E)'), label_size = 18, nrow = 1, ncol = 2, rel_widths = c(0.8, 1))
 
 
-figure7 <- plot_grid(figure7_1, figure7_2, figure7_4,
+figure7 <- plot_grid(figure7_1, figure7_2, figure7_3,
                      nrow = 3,
                      ncol = 1,
                      rel_heights = c(1.2, 1.2, 1.1)
   )
 
 figure7
+```
+
+```{r AhR activity for paper, fig.width = 10, fig.height = 9}
+# Generate the plot in paper figure form
+figure8_1 <- plot_grid(NULL, ILC_Ahr_gene, labels = c('(A)            AhR response genes'), label_x = -0.3, label_size = 18, nrow = 2, ncol = 1, rel_heights = c(0.1, 1))
+figure8_2 <- plot_grid(NULL, ILC_Ahr_TF, labels = c('(B)       Inferred AhR pathway activity'), label_x = -0.40, label_size = 18, nrow = 2, ncol = 1, rel_heights = c(0.1, 1))
+figure8_3 <- plot_grid(figure8_1, figure8_2, nrow = 1)
+figure8_4 <- plot_grid(NULL, ILC_Ahr, labels = c('(C)   Inferred AhR pathway activity'), label_x = -0.2, label_size = 18, nrow = 2, ncol = 1, rel_heights = c(0.1, 1))
+
+figure8 <- plot_grid(figure8_3, figure8_4,
+                     nrow = 2,
+                     ncol = 1,
+                     rel_heights = c(1.4, 1)
+  )
+
+figure8
 ```
 
 
@@ -486,15 +392,7 @@ dir.create("./Figures", showWarnings = FALSE)
 
 # Save the figure
 ggsave2(plot = figure7, path = "./Figures", "Figure7.tiff", device = "tiff", dpi = 300, bg = "white", width = 12, height = 16, units = "in")
-```
-
-```{r Output the CSV files}
-# Create a folder for CSV files
-dir.create("./CSV", showWarnings = FALSE)
-
-# Export to csv
-write.csv(BPC.df, file.path("./CSV", "Alt.BPC_ILC_TF_activities.csv"))
-write.csv(Alt.df, file.path("./CSV", "Alt_ILC_TF_activities.csv"))
+ggsave2(plot = figure8, path = "./Figures", "Figure8.tiff", device = "tiff", dpi = 300, bg = "white", width = 10, height = 9, units = "in")
 ```
 
 
